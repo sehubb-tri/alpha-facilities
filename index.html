@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1e40af">
+    <title>Alpha Facilities QC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="app"></div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const CAMPUSES = [
+            "Alpha Austin",
+            "Alpha Dallas",
+            "Alpha Houston",
+            "Alpha San Francisco",
+            "Alpha Phoenix",
+            "Alpha Denver"
+        ];
+
+        // Zone definitions with questions
+        const ZONES = {
+            // MANDATORY ZONES (5)
+            entry: {
+                name: "Entry & Lobby",
+                type: "mandatory",
+                amberEligible: true,
+                description: "Parent-facing zone — 47-second arrival decision",
+                cleanliness: [
+                    "Floor free of debris, spills, and stains?",
+                    "Entry mat clean and flat (no trip hazard)?",
+                    "Exterior door glass smudge-free?",
+                    "Interior glass smudge-free?",
+                    "Reception surfaces dust-free?",
+                    "High-touch surfaces clean (door handles, counter)?",
+                    "Trash cans empty with liners intact?",
+                    "No detectable odor from doorway?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            hallway: {
+                name: "Hallway / Corridor",
+                type: "mandatory",
+                amberEligible: true,
+                cleanliness: [
+                    "Floor free of debris, spills, and stains?",
+                    "Edges, corners, and baseboards dust-free?",
+                    "No visible scuff marks on walls?",
+                    "Glass and doors smudge-free?",
+                    "High-touch surfaces clean (door handles, railings)?",
+                    "Trash cans empty with liners intact?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            restroom_primary: {
+                name: "Restroom (Lobby / Primary)",
+                type: "mandatory",
+                amberEligible: false, // Any defect = RED
+                description: "Amber-Ineligible zone — any defect = Red",
+                cleanliness: [
+                    "Toilets/urinals sanitary (no visible soil, stains, residue)?",
+                    "Sinks and counters dry and clean?",
+                    "Mirrors smudge-free?",
+                    "Floor free of debris, water, and stains?",
+                    "Soap dispensers functional and stocked?",
+                    "Paper towels/hand dryers functional and stocked?",
+                    "Toilet paper stocked (not empty)?",
+                    "Trash cans empty with liners intact?",
+                    "No detectable odor from doorway?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            commons: {
+                name: "Commons Area",
+                type: "mandatory",
+                amberEligible: true,
+                cleanliness: [
+                    "Floor free of debris, spills, and stains?",
+                    "Tables and surfaces clean and dry?",
+                    "Furniture properly arranged (not scattered)?",
+                    "High-touch surfaces clean?",
+                    "Trash cans empty with liners intact?",
+                    "No detectable odor?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            supply_closet: {
+                name: "Supply Closet",
+                type: "mandatory",
+                amberEligible: true,
+                description: "Inventory verification — 1-week minimum threshold",
+                isSupplyCheck: true,
+                cleanliness: [
+                    "Toilet paper: 1-week supply available?",
+                    "Paper towels: 1-week supply available?",
+                    "Soap/sanitizer: 1-week supply available?",
+                    "Trash liners: 1-week supply available?",
+                    "Cleaning supplies present and stocked?",
+                    "Closet organized (not cluttered/hazardous)?"
+                ],
+                supplyItems: [0, 1, 2, 3] // Indices that trigger Cintas order if No
+            },
+
+            // OPTIONAL ZONES
+            restroom_additional: {
+                name: "Restroom (Additional)",
+                type: "optional",
+                amberEligible: false,
+                description: "Amber-Ineligible zone — any defect = Red",
+                cleanliness: [
+                    "Toilets/urinals sanitary?",
+                    "Sinks and counters dry and clean?",
+                    "Mirrors smudge-free?",
+                    "Floor free of debris, water, and stains?",
+                    "Soap dispensers functional and stocked?",
+                    "Paper towels/hand dryers functional and stocked?",
+                    "Toilet paper stocked?",
+                    "Trash cans empty with liners intact?",
+                    "No detectable odor from doorway?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            classroom: {
+                name: "Classroom",
+                type: "optional",
+                amberEligible: true,
+                cleanliness: [
+                    "Floor free of debris, spills, and stains?",
+                    "Edges, corners, and baseboards dust-free?",
+                    "Student desks/tables clean?",
+                    "Teacher desk/surfaces clean?",
+                    "Whiteboard/board area clean (tray, ledge)?",
+                    "High-touch surfaces clean (door handle, light switches)?",
+                    "Trash cans empty with liners intact?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            office: {
+                name: "Office / Workroom",
+                type: "optional",
+                amberEligible: true,
+                cleanliness: [
+                    "Floor free of debris and stains?",
+                    "Desk and work surfaces dust-free?",
+                    "High-touch surfaces clean?",
+                    "Trash cans empty with liners intact?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            gym: {
+                name: "Gym / Multi-Purpose",
+                type: "optional",
+                amberEligible: true,
+                cleanliness: [
+                    "Floor free of debris, spills, and stains?",
+                    "Floor finish intact (no excessive scuffing/peeling)?",
+                    "Bleachers/seating clean?",
+                    "Equipment storage area organized?",
+                    "High-touch surfaces clean (door handles, equipment)?",
+                    "Trash cans empty with liners intact?",
+                    "No detectable odor?",
+                    "All clear — no safety hazards?"
+                ]
+            },
+            cafeteria: {
+                name: "Cafeteria",
+                type: "optional",
+                amberEligible: true,
+                cleanliness: [
+                    "Floor free of debris, spills, and stains?",
+                    "Tables and seating clean and dry?",
+                    "Service/counter area clean?",
+                    "High-touch surfaces clean?",
+                    "Trash cans empty with liners intact?",
+                    "No detectable odor?",
+                    "All clear — no safety hazards?"
+                ]
+            }
+        };
+
+        const MANDATORY_ZONE_IDS = ['entry', 'hallway', 'restroom_primary', 'commons', 'supply_closet'];
+        const OPTIONAL_ZONE_IDS = ['restroom_additional', 'classroom', 'office', 'gym', 'cafeteria'];
+
+        // ============================================
+        // APP STATE
+        // ============================================
+        let state = {
+            screen: 'home', // home, setup, audit, zone, condition, summary, complete
+            campus: '',
+            auditorName: '',
+            startTime: null,
+            selectedOptionalZones: [],
+            currentZoneIndex: 0,
+            zoneResults: {},
+            conditionAlerts: [],
+            tourReady: null
+        };
+
+        // ============================================
+        // STORAGE
+        // ============================================
+        function saveAudit(audit) {
+            const audits = JSON.parse(localStorage.getItem('alpha_audits') || '[]');
+            audits.push(audit);
+            localStorage.setItem('alpha_audits', JSON.stringify(audits));
+        }
+
+        function getAudits() {
+            return JSON.parse(localStorage.getItem('alpha_audits') || '[]');
+        }
+
+        // ============================================
+        // STATUS CALCULATION
+        // ============================================
+        function calculateStatus() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            let totalDefects = 0;
+            let hasAmberIneligibleDefect = false;
+
+            for (const zoneId of allZones) {
+                const zone = ZONES[zoneId];
+                const results = state.zoneResults[zoneId] || {};
+                const defects = Object.values(results).filter(v => v === 'no').length;
+                
+                totalDefects += defects;
+                
+                if (!zone.amberEligible && defects > 0) {
+                    hasAmberIneligibleDefect = true;
+                }
+            }
+
+            // Tour Ready = No means automatic RED
+            if (state.tourReady === 'no') {
+                return 'RED';
+            }
+
+            // Any defect in amber-ineligible zone = RED
+            if (hasAmberIneligibleDefect) {
+                return 'RED';
+            }
+
+            // 0 defects = GREEN
+            if (totalDefects === 0) {
+                return 'GREEN';
+            }
+
+            // 1 defect in amber-eligible zone = AMBER
+            if (totalDefects === 1) {
+                return 'AMBER';
+            }
+
+            // 2+ defects = RED
+            return 'RED';
+        }
+
+        function countDefects(zoneId) {
+            const results = state.zoneResults[zoneId] || {};
+            return Object.values(results).filter(v => v === 'no').length;
+        }
+
+        function getTotalDefects() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            return allZones.reduce((sum, zoneId) => sum + countDefects(zoneId), 0);
+        }
+
+        // ============================================
+        // RENDER FUNCTIONS
+        // ============================================
+        function render() {
+            const app = document.getElementById('app');
+            
+            switch(state.screen) {
+                case 'home':
+                    app.innerHTML = renderHome();
+                    break;
+                case 'setup':
+                    app.innerHTML = renderSetup();
+                    break;
+                case 'audit':
+                    app.innerHTML = renderAuditOverview();
+                    break;
+                case 'zone':
+                    app.innerHTML = renderZone();
+                    break;
+                case 'condition':
+                    app.innerHTML = renderConditionAlert();
+                    break;
+                case 'tourready':
+                    app.innerHTML = renderTourReady();
+                    break;
+                case 'summary':
+                    app.innerHTML = renderSummary();
+                    break;
+                case 'complete':
+                    app.innerHTML = renderComplete();
+                    break;
+                case 'history':
+                    app.innerHTML = renderHistory();
+                    break;
+            }
+            
+            attachEventListeners();
+        }
+
+        function renderHome() {
+            const audits = getAudits();
+            const recentAudits = audits.slice(-5).reverse();
+            
+            return `
+                <div class="min-h-screen bg-gradient-to-b from-blue-800 to-blue-900 text-white">
+                    <div class="p-6 pt-12">
+                        <h1 class="text-3xl font-bold mb-2">Alpha Facilities</h1>
+                        <p class="text-blue-200">Daily QC Walkthrough</p>
+                    </div>
+                    
+                    <div class="p-6 space-y-4">
+                        <button onclick="startAudit()" class="w-full bg-white text-blue-800 py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center">
+                            <span class="text-2xl mr-3">✅</span>
+                            Start Daily QC
+                        </button>
+                        
+                        <button onclick="goToHistory()" class="w-full bg-blue-700 text-white py-3 rounded-xl text-lg font-medium">
+                            📊 View History (${audits.length})
+                        </button>
+                    </div>
+                    
+                    ${recentAudits.length > 0 ? `
+                        <div class="bg-white text-gray-800 rounded-t-3xl mt-6 p-6 min-h-[300px]">
+                            <h2 class="font-bold text-lg mb-4">Recent Audits</h2>
+                            <div class="space-y-3">
+                                ${recentAudits.map(a => `
+                                    <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                        <span class="text-2xl mr-3">${a.status === 'GREEN' ? '🟢' : a.status === 'AMBER' ? '🟡' : '🔴'}</span>
+                                        <div class="flex-1">
+                                            <div class="font-medium">${a.campus}</div>
+                                            <div class="text-sm text-gray-500">${a.date} • ${a.defects} defect${a.defects !== 1 ? 's' : ''}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="bg-white text-gray-800 rounded-t-3xl mt-6 p-6 min-h-[300px]">
+                            <div class="text-center py-12 text-gray-400">
+                                <div class="text-5xl mb-4">📋</div>
+                                <p>No audits yet</p>
+                                <p class="text-sm">Start your first Daily QC above</p>
+                            </div>
+                        </div>
+                    `}
+                </div>
+            `;
+        }
+
+        function renderSetup() {
+            return `
+                <div class="min-h-screen bg-gray-100">
+                    <div class="bg-blue-800 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="goHome()" class="text-2xl mr-3">←</button>
+                            <div>
+                                <h1 class="text-xl font-bold">Setup Audit</h1>
+                                <p class="text-blue-200 text-sm">Select campus and optional zones</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 space-y-6">
+                        <!-- Campus -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Campus *</label>
+                            <select id="campus" class="w-full border border-gray-300 rounded-lg p-3 text-lg bg-white">
+                                <option value="">Select campus...</option>
+                                ${CAMPUSES.map(c => `<option value="${c}">${c}</option>`).join('')}
+                            </select>
+                        </div>
+                        
+                        <!-- Auditor Name -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Your Name *</label>
+                            <input type="text" id="auditorName" placeholder="Enter your name" class="w-full border border-gray-300 rounded-lg p-3 text-lg">
+                        </div>
+                        
+                        <!-- Mandatory Zones -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Mandatory Zones (5)</label>
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                                ${MANDATORY_ZONE_IDS.map(id => `
+                                    <div class="flex items-center">
+                                        <span class="text-blue-500 mr-2">✓</span>
+                                        <span>${ZONES[id].name}</span>
+                                        ${!ZONES[id].amberEligible ? '<span class="ml-auto text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Any defect = RED</span>' : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <!-- Optional Zones -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Optional Zones (select 2-6)</label>
+                            <div class="space-y-2">
+                                ${OPTIONAL_ZONE_IDS.map(id => `
+                                    <label class="flex items-center p-3 bg-white rounded-lg border border-gray-200 cursor-pointer">
+                                        <input type="checkbox" value="${id}" class="optional-zone w-5 h-5 mr-3">
+                                        <span class="flex-1">${ZONES[id].name}</span>
+                                        ${!ZONES[id].amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Any defect = RED</span>' : ''}
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <button onclick="beginAudit()" class="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold">
+                            Begin Walkthrough
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAuditOverview() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            
+            return `
+                <div class="min-h-screen bg-gray-100 pb-24">
+                    <div class="bg-blue-800 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="confirmExit()" class="text-2xl mr-3">←</button>
+                            <div>
+                                <h1 class="text-xl font-bold">${state.campus}</h1>
+                                <p class="text-blue-200 text-sm">Daily QC Walkthrough</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress -->
+                    <div class="bg-white p-4 border-b">
+                        <div class="flex justify-between text-sm text-gray-600 mb-2">
+                            <span>Progress</span>
+                            <span>${Object.keys(state.zoneResults).length} of ${allZones.length} zones</span>
+                        </div>
+                        <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div class="h-full bg-blue-500 transition-all" style="width: ${(Object.keys(state.zoneResults).length / allZones.length) * 100}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4">
+                        <h2 class="font-bold text-gray-700 mb-3">Mandatory Zones</h2>
+                        <div class="space-y-2 mb-6">
+                            ${MANDATORY_ZONE_IDS.map((id, idx) => renderZoneCard(id, idx)).join('')}
+                        </div>
+                        
+                        ${state.selectedOptionalZones.length > 0 ? `
+                            <h2 class="font-bold text-gray-700 mb-3">Optional Zones</h2>
+                            <div class="space-y-2">
+                                ${state.selectedOptionalZones.map((id, idx) => renderZoneCard(id, MANDATORY_ZONE_IDS.length + idx)).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <!-- Bottom Bar -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+                        ${Object.keys(state.zoneResults).length === allZones.length ? `
+                            <button onclick="goToTourReady()" class="w-full bg-green-500 text-white py-4 rounded-xl text-lg font-bold">
+                                Continue to Final Question →
+                            </button>
+                        ` : `
+                            <button onclick="goToNextIncomplete()" class="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold">
+                                ${Object.keys(state.zoneResults).length === 0 ? 'Start First Zone' : 'Continue to Next Zone'} →
+                            </button>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderZoneCard(zoneId, index) {
+            const zone = ZONES[zoneId];
+            const results = state.zoneResults[zoneId];
+            const isComplete = results !== undefined;
+            const defects = isComplete ? countDefects(zoneId) : 0;
+            
+            let statusIcon = '○';
+            let statusColor = 'text-gray-400';
+            let bgColor = 'bg-white';
+            
+            if (isComplete) {
+                if (defects === 0) {
+                    statusIcon = '✓';
+                    statusColor = 'text-green-500';
+                    bgColor = 'bg-green-50';
+                } else {
+                    statusIcon = defects.toString();
+                    statusColor = 'text-red-500';
+                    bgColor = 'bg-red-50';
+                }
+            }
+            
+            return `
+                <button onclick="goToZone(${index})" class="w-full ${bgColor} p-4 rounded-lg border border-gray-200 flex items-center text-left">
+                    <span class="w-8 h-8 rounded-full ${isComplete ? (defects === 0 ? 'bg-green-500' : 'bg-red-500') : 'bg-gray-200'} text-white flex items-center justify-center mr-3 font-bold">
+                        ${isComplete ? (defects === 0 ? '✓' : defects) : index + 1}
+                    </span>
+                    <div class="flex-1">
+                        <div class="font-medium">${zone.name}</div>
+                        ${zone.description ? `<div class="text-xs text-gray-500">${zone.description}</div>` : ''}
+                    </div>
+                    ${!zone.amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️</span>' : ''}
+                </button>
+            `;
+        }
+
+        function renderZone() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            const zoneId = allZones[state.currentZoneIndex];
+            const zone = ZONES[zoneId];
+            const results = state.zoneResults[zoneId] || {};
+            
+            return `
+                <div class="min-h-screen bg-gray-100 pb-24">
+                    <div class="bg-blue-800 text-white p-4">
+                        <div class="flex items-center justify-between">
+                            <button onclick="goToAuditOverview()" class="text-2xl">←</button>
+                            <div class="text-center">
+                                <h1 class="text-lg font-bold">${zone.name}</h1>
+                                <p class="text-blue-200 text-sm">Zone ${state.currentZoneIndex + 1} of ${allZones.length}</p>
+                            </div>
+                            <div class="w-8"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress bar -->
+                    <div class="h-1 bg-gray-200">
+                        <div class="h-full bg-blue-500" style="width: ${((state.currentZoneIndex + 1) / allZones.length) * 100}%"></div>
+                    </div>
+                    
+                    ${!zone.amberEligible ? `
+                        <div class="bg-red-100 border-l-4 border-red-500 p-3 m-4 rounded">
+                            <div class="font-medium text-red-800">⚠️ Amber-Ineligible Zone</div>
+                            <div class="text-sm text-red-700">Any defect in this zone = RED status</div>
+                        </div>
+                    ` : ''}
+                    
+                    ${zone.isSupplyCheck ? `
+                        <div class="bg-yellow-100 border-l-4 border-yellow-500 p-3 m-4 rounded">
+                            <div class="font-medium text-yellow-800">📦 Supply Check</div>
+                            <div class="text-sm text-yellow-700">"No" on items 1-4 triggers Cintas order (1-week lead time)</div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="p-4">
+                        <h2 class="font-bold text-gray-700 mb-3">${zone.isSupplyCheck ? 'Supply Readiness' : 'Cleanliness (Worksmith Performance)'}</h2>
+                        <div class="space-y-3">
+                            ${zone.cleanliness.map((q, idx) => `
+                                <div class="bg-white rounded-lg p-4 shadow-sm">
+                                    <div class="text-sm mb-3">${idx + 1}. ${q}</div>
+                                    <div class="flex gap-2">
+                                        <button onclick="setResponse('${zoneId}', ${idx}, 'yes')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'yes' ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}">
+                                            ✓ Yes
+                                        </button>
+                                        <button onclick="setResponse('${zoneId}', ${idx}, 'no')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'no' ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}">
+                                            ✗ No
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    
+                    <!-- Bottom Bar -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+                        <button onclick="completeZone('${zoneId}')" id="zoneCompleteBtn" class="w-full py-4 rounded-xl text-lg font-bold ${isZoneComplete(zoneId) ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}" ${isZoneComplete(zoneId) ? '' : 'disabled'}>
+                            ${isZoneComplete(zoneId) ? 'Complete Zone → Condition Check' : `Answer all questions (${Object.keys(results).length}/${zone.cleanliness.length})`}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderConditionAlert() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            const zoneId = allZones[state.currentZoneIndex];
+            const zone = ZONES[zoneId];
+            
+            return `
+                <div class="min-h-screen bg-gray-100 pb-24">
+                    <div class="bg-orange-500 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="goToZone(${state.currentZoneIndex})" class="text-2xl mr-3">←</button>
+                            <div>
+                                <h1 class="text-xl font-bold">Condition Alert</h1>
+                                <p class="text-orange-100 text-sm">${zone.name}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 space-y-6">
+                        <div class="bg-white rounded-lg p-6 shadow">
+                            <div class="text-lg font-medium mb-4">Would you route a tour away from this zone due to building condition?</div>
+                            
+                            <div class="space-y-3">
+                                <button onclick="setConditionAlert('${zoneId}', false)" class="w-full p-4 rounded-lg border-2 ${getConditionAlert(zoneId) === false ? 'border-green-500 bg-green-50' : 'border-gray-200'} flex items-center">
+                                    <span class="text-2xl mr-3">✓</span>
+                                    <div class="text-left">
+                                        <div class="font-medium">No</div>
+                                        <div class="text-sm text-gray-500">Zone condition is acceptable for tours</div>
+                                    </div>
+                                </button>
+                                
+                                <button onclick="setConditionAlert('${zoneId}', true)" class="w-full p-4 rounded-lg border-2 ${getConditionAlert(zoneId) === true ? 'border-red-500 bg-red-50' : 'border-gray-200'} flex items-center">
+                                    <span class="text-2xl mr-3">⚠️</span>
+                                    <div class="text-left">
+                                        <div class="font-medium">Yes — Condition Issue</div>
+                                        <div class="text-sm text-gray-500">Routes to B&G (photo required)</div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        ${getConditionAlert(zoneId) === true ? `
+                            <div class="bg-white rounded-lg p-4 shadow slide-up">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Describe the condition issue *</label>
+                                <input type="text" id="conditionNote" maxlength="100" placeholder="e.g., Hole in drywall near door" class="w-full border border-gray-300 rounded-lg p-3" value="${getConditionNote(zoneId) || ''}">
+                                <div class="text-xs text-gray-400 mt-1 text-right"><span id="charCount">${(getConditionNote(zoneId) || '').length}</span>/100</div>
+                                
+                                <div class="mt-4">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Photo (required for production)</label>
+                                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center text-gray-400">
+                                        📷 Photo capture<br><span class="text-xs">(Enabled in production version)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div class="text-sm text-blue-800">
+                                <strong>Note:</strong> Condition alerts do NOT affect your cleanliness score. They route directly to B&G for building maintenance.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bottom Bar -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+                        <button onclick="finishZone()" id="conditionCompleteBtn" class="w-full py-4 rounded-xl text-lg font-bold ${canCompleteCondition(zoneId) ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-500'}" ${canCompleteCondition(zoneId) ? '' : 'disabled'}>
+                            ${state.currentZoneIndex < allZones.length - 1 ? 'Next Zone →' : 'Finish Walkthrough →'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTourReady() {
+            return `
+                <div class="min-h-screen bg-gray-100 pb-24">
+                    <div class="bg-blue-800 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="goToAuditOverview()" class="text-2xl mr-3">←</button>
+                            <div>
+                                <h1 class="text-xl font-bold">Final Question</h1>
+                                <p class="text-blue-200 text-sm">Tour Readiness Assessment</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 space-y-6">
+                        <div class="bg-white rounded-lg p-6 shadow">
+                            <div class="text-lg font-medium mb-4">Based on your entire walkthrough, could a parent tour happen right now?</div>
+                            
+                            <div class="space-y-3">
+                                <button onclick="setTourReady('yes')" class="w-full p-4 rounded-lg border-2 ${state.tourReady === 'yes' ? 'border-green-500 bg-green-50' : 'border-gray-200'} flex items-center">
+                                    <span class="text-2xl mr-3">✓</span>
+                                    <div class="text-left">
+                                        <div class="font-medium">Yes — Tour Ready</div>
+                                        <div class="text-sm text-gray-500">Campus is presentable for visitors</div>
+                                    </div>
+                                </button>
+                                
+                                <button onclick="setTourReady('no')" class="w-full p-4 rounded-lg border-2 ${state.tourReady === 'no' ? 'border-red-500 bg-red-50' : 'border-gray-200'} flex items-center">
+                                    <span class="text-2xl mr-3">✗</span>
+                                    <div class="text-left">
+                                        <div class="font-medium">No — Not Tour Ready</div>
+                                        <div class="text-sm text-red-600 font-medium">⚠️ Automatic RED status</div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bottom Bar -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+                        <button onclick="goToSummary()" class="w-full py-4 rounded-xl text-lg font-bold ${state.tourReady !== null ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}" ${state.tourReady !== null ? '' : 'disabled'}>
+                            Review Summary →
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSummary() {
+            const status = calculateStatus();
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            const totalDefects = getTotalDefects();
+            const duration = Math.round((Date.now() - state.startTime) / 60000);
+            
+            const statusColors = {
+                GREEN: 'bg-green-500',
+                AMBER: 'bg-yellow-500',
+                RED: 'bg-red-500'
+            };
+            
+            return `
+                <div class="min-h-screen bg-gray-100 pb-24">
+                    <div class="${statusColors[status]} text-white p-6 text-center">
+                        <div class="text-6xl mb-2">${status === 'GREEN' ? '✓' : status === 'AMBER' ? '⚠️' : '✗'}</div>
+                        <div class="text-3xl font-bold">${status}</div>
+                        <div class="text-lg opacity-90">${state.campus}</div>
+                    </div>
+                    
+                    <div class="p-4 space-y-4">
+                        <!-- Stats -->
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="bg-white p-4 rounded-lg shadow text-center">
+                                <div class="text-2xl font-bold">${allZones.length}</div>
+                                <div class="text-xs text-gray-500">Zones</div>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow text-center">
+                                <div class="text-2xl font-bold ${totalDefects > 0 ? 'text-red-500' : 'text-green-500'}">${totalDefects}</div>
+                                <div class="text-xs text-gray-500">Defects</div>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow text-center">
+                                <div class="text-2xl font-bold">${duration}m</div>
+                                <div class="text-xs text-gray-500">Duration</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Tour Ready -->
+                        <div class="bg-white p-4 rounded-lg shadow flex items-center justify-between">
+                            <span class="font-medium">Tour Ready?</span>
+                            <span class="${state.tourReady === 'yes' ? 'text-green-600' : 'text-red-600'} font-bold">
+                                ${state.tourReady === 'yes' ? '✓ Yes' : '✗ No'}
+                            </span>
+                        </div>
+                        
+                        <!-- Zone Results -->
+                        <div class="bg-white rounded-lg shadow">
+                            <div class="p-4 border-b font-bold">Zone Results</div>
+                            <div class="divide-y">
+                                ${allZones.map(zoneId => {
+                                    const zone = ZONES[zoneId];
+                                    const defects = countDefects(zoneId);
+                                    return `
+                                        <div class="p-3 flex items-center">
+                                            <span class="w-8 h-8 rounded-full ${defects === 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} flex items-center justify-center mr-3 font-bold">
+                                                ${defects === 0 ? '✓' : defects}
+                                            </span>
+                                            <div class="flex-1">
+                                                <div class="font-medium">${zone.name}</div>
+                                            </div>
+                                            ${!zone.amberEligible && defects > 0 ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">→ RED</span>' : ''}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                        
+                        <!-- Condition Alerts -->
+                        ${state.conditionAlerts.length > 0 ? `
+                            <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                <div class="font-bold text-orange-800 mb-2">⚠️ Condition Alerts (${state.conditionAlerts.length})</div>
+                                <div class="text-sm text-orange-700">
+                                    ${state.conditionAlerts.map(a => `• ${ZONES[a.zoneId].name}: ${a.note}`).join('<br>')}
+                                </div>
+                                <div class="text-xs text-orange-600 mt-2">These will be routed to B&G</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <!-- Bottom Bar -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+                        <button onclick="submitAudit()" class="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold">
+                            ✓ Submit Audit
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderComplete() {
+            const status = calculateStatus();
+            const statusColors = {
+                GREEN: 'bg-green-500',
+                AMBER: 'bg-yellow-500',
+                RED: 'bg-red-500'
+            };
+            
+            return `
+                <div class="min-h-screen ${statusColors[status]} flex flex-col items-center justify-center p-8 text-white text-center">
+                    <div class="text-8xl mb-6">✅</div>
+                    <h1 class="text-3xl font-bold mb-2">Audit Submitted!</h1>
+                    <div class="text-6xl font-bold my-4">${status}</div>
+                    <p class="text-lg opacity-90 mb-8">${state.campus}</p>
+                    
+                    ${state.conditionAlerts.length > 0 ? `
+                        <div class="bg-white/20 rounded-lg p-4 mb-8 text-left w-full max-w-sm">
+                            <div class="font-bold mb-2">📋 ${state.conditionAlerts.length} Condition Alert(s)</div>
+                            <div class="text-sm opacity-90">Routed to B&G for follow-up</div>
+                        </div>
+                    ` : ''}
+                    
+                    <button onclick="goHome()" class="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold">
+                        Done
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderHistory() {
+            const audits = getAudits().reverse();
+            
+            return `
+                <div class="min-h-screen bg-gray-100">
+                    <div class="bg-blue-800 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="goHome()" class="text-2xl mr-3">←</button>
+                            <h1 class="text-xl font-bold">Audit History</h1>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4">
+                        ${audits.length === 0 ? `
+                            <div class="text-center py-12 text-gray-400">
+                                <div class="text-5xl mb-4">📋</div>
+                                <p>No audits yet</p>
+                            </div>
+                        ` : `
+                            <div class="space-y-3">
+                                ${audits.map(a => `
+                                    <div class="bg-white rounded-lg p-4 shadow">
+                                        <div class="flex items-center mb-2">
+                                            <span class="text-2xl mr-3">${a.status === 'GREEN' ? '🟢' : a.status === 'AMBER' ? '🟡' : '🔴'}</span>
+                                            <div class="flex-1">
+                                                <div class="font-bold">${a.campus}</div>
+                                                <div class="text-sm text-gray-500">${a.date} • ${a.auditor}</div>
+                                            </div>
+                                            <div class="text-right">
+                                                <div class="font-bold ${a.status === 'GREEN' ? 'text-green-600' : a.status === 'AMBER' ? 'text-yellow-600' : 'text-red-600'}">${a.status}</div>
+                                                <div class="text-sm text-gray-500">${a.defects} defect${a.defects !== 1 ? 's' : ''}</div>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-gray-400">
+                                            ${a.zones} zones • ${a.duration}m • Tour Ready: ${a.tourReady ? 'Yes' : 'No'}
+                                            ${a.conditionAlerts > 0 ? ` • ${a.conditionAlerts} condition alert(s)` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // EVENT HANDLERS
+        // ============================================
+        function attachEventListeners() {
+            const conditionNote = document.getElementById('conditionNote');
+            if (conditionNote) {
+                conditionNote.addEventListener('input', (e) => {
+                    document.getElementById('charCount').textContent = e.target.value.length;
+                    updateConditionNote(e.target.value);
+                });
+            }
+        }
+
+        function goHome() {
+            state = {
+                screen: 'home',
+                campus: '',
+                auditorName: '',
+                startTime: null,
+                selectedOptionalZones: [],
+                currentZoneIndex: 0,
+                zoneResults: {},
+                conditionAlerts: [],
+                tourReady: null
+            };
+            render();
+        }
+
+        function goToHistory() {
+            state.screen = 'history';
+            render();
+        }
+
+        function startAudit() {
+            state.screen = 'setup';
+            render();
+        }
+
+        function beginAudit() {
+            const campus = document.getElementById('campus').value;
+            const auditorName = document.getElementById('auditorName').value;
+            const optionalZones = Array.from(document.querySelectorAll('.optional-zone:checked')).map(el => el.value);
+            
+            if (!campus || !auditorName) {
+                alert('Please select a campus and enter your name');
+                return;
+            }
+            
+            state.campus = campus;
+            state.auditorName = auditorName;
+            state.selectedOptionalZones = optionalZones;
+            state.startTime = Date.now();
+            state.screen = 'audit';
+            render();
+        }
+
+        function goToAuditOverview() {
+            state.screen = 'audit';
+            render();
+        }
+
+        function goToNextIncomplete() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            for (let i = 0; i < allZones.length; i++) {
+                if (!state.zoneResults[allZones[i]]) {
+                    state.currentZoneIndex = i;
+                    state.screen = 'zone';
+                    render();
+                    return;
+                }
+            }
+        }
+
+        function goToZone(index) {
+            state.currentZoneIndex = index;
+            state.screen = 'zone';
+            render();
+        }
+
+        function setResponse(zoneId, questionIndex, value) {
+            if (!state.zoneResults[zoneId]) {
+                state.zoneResults[zoneId] = {};
+            }
+            state.zoneResults[zoneId][questionIndex] = value;
+            render();
+        }
+
+        function isZoneComplete(zoneId) {
+            const zone = ZONES[zoneId];
+            const results = state.zoneResults[zoneId] || {};
+            return Object.keys(results).length === zone.cleanliness.length;
+        }
+
+        function completeZone(zoneId) {
+            if (isZoneComplete(zoneId)) {
+                state.screen = 'condition';
+                render();
+            }
+        }
+
+        function getConditionAlert(zoneId) {
+            const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
+            return alert ? alert.hasIssue : null;
+        }
+
+        function getConditionNote(zoneId) {
+            const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
+            return alert ? alert.note : '';
+        }
+
+        function setConditionAlert(zoneId, hasIssue) {
+            const existingIndex = state.conditionAlerts.findIndex(a => a.zoneId === zoneId);
+            if (existingIndex >= 0) {
+                if (hasIssue) {
+                    state.conditionAlerts[existingIndex].hasIssue = true;
+                } else {
+                    state.conditionAlerts.splice(existingIndex, 1);
+                }
+            } else if (hasIssue) {
+                state.conditionAlerts.push({ zoneId, hasIssue: true, note: '' });
+            }
+            render();
+        }
+
+        function updateConditionNote(note) {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            const zoneId = allZones[state.currentZoneIndex];
+            const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
+            if (alert) {
+                alert.note = note;
+            }
+        }
+
+        function canCompleteCondition(zoneId) {
+            const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
+            if (!alert) return true; // No alert selected = No issue
+            if (alert.hasIssue === false) return true;
+            if (alert.hasIssue === true && alert.note && alert.note.length > 0) return true;
+            return false;
+        }
+
+        function finishZone() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            if (state.currentZoneIndex < allZones.length - 1) {
+                state.currentZoneIndex++;
+                state.screen = 'zone';
+            } else {
+                state.screen = 'audit';
+            }
+            render();
+        }
+
+        function goToTourReady() {
+            state.screen = 'tourready';
+            render();
+        }
+
+        function setTourReady(value) {
+            state.tourReady = value;
+            render();
+        }
+
+        function goToSummary() {
+            state.screen = 'summary';
+            render();
+        }
+
+        function confirmExit() {
+            if (confirm('Exit audit? Your progress will be lost.')) {
+                goHome();
+            }
+        }
+
+        function submitAudit() {
+            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
+            const audit = {
+                id: Date.now(),
+                date: new Date().toLocaleDateString(),
+                time: new Date().toLocaleTimeString(),
+                campus: state.campus,
+                auditor: state.auditorName,
+                status: calculateStatus(),
+                defects: getTotalDefects(),
+                zones: allZones.length,
+                duration: Math.round((Date.now() - state.startTime) / 60000),
+                tourReady: state.tourReady === 'yes',
+                conditionAlerts: state.conditionAlerts.filter(a => a.hasIssue).length,
+                zoneResults: state.zoneResults,
+                conditionAlertDetails: state.conditionAlerts.filter(a => a.hasIssue)
+            };
+            
+            saveAudit(audit);
+            state.screen = 'complete';
+            render();
+        }
+
+        // Initialize
+        render();
+    </script>
+</body>
+</html>
