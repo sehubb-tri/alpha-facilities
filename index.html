@@ -5,9 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#1e40af">
+    <meta name="theme-color" content="#2B4EF6">
     <title>Alpha Facilities</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏫</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        alpha: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#2B4EF6',
+                            600: '#2442d4',
+                            700: '#1e38b2',
+                            800: '#1a3091',
+                            900: '#162970',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
         * { -webkit-tap-highlight-color: transparent; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -16,27 +39,32 @@
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
+        .alpha-gradient { background: linear-gradient(135deg, #2B4EF6 0%, #1a3091 100%); }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div id="app"></div>
+    
+    <!-- Hidden file input for camera fallback -->
+    <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
 
     <script>
         // ============================================
-        // CAMERA FUNCTIONS (Global)
+        // CAMERA FUNCTIONS - WITH FALLBACK
         // ============================================
         let cameraStream = null;
         let cameraCallback = null;
 
         async function openCamera(callback, label = 'Take Photo') {
             cameraCallback = callback;
-            const modal = document.getElementById('cameraModal');
-            const video = document.getElementById('cameraFeed');
-            const labelEl = document.getElementById('cameraLabel');
             
-            if (labelEl) labelEl.textContent = '📷 ' + label;
-            
+            // Try native camera API first
             try {
+                const modal = document.getElementById('cameraModal');
+                const video = document.getElementById('cameraFeed');
+                const labelEl = document.getElementById('cameraLabel');
+                if (labelEl) labelEl.textContent = '📷 ' + label;
+                
                 cameraStream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
                     audio: false
@@ -44,51 +72,78 @@
                 video.srcObject = cameraStream;
                 modal.classList.remove('hidden');
             } catch (err) {
-                alert('Unable to access camera. Please grant permission and try again.');
-                console.error('Camera error:', err);
+                console.log('Camera API failed, using file picker fallback:', err);
+                // Fallback to file input
+                useFilePicker(callback);
             }
+        }
+
+        function useFilePicker(callback) {
+            const fileInput = document.getElementById('fileInput');
+            fileInput.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        if (callback) callback(event.target.result);
+                    };
+                    reader.readAsDataURL(file);
+                }
+                fileInput.value = ''; // Reset for next use
+            };
+            fileInput.click();
         }
 
         function capturePhoto() {
             const video = document.getElementById('cameraFeed');
             const canvas = document.getElementById('cameraCanvas');
-            
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            
             const imageData = canvas.toDataURL('image/jpeg', 0.7);
             closeCamera();
-            
-            if (cameraCallback) {
-                cameraCallback(imageData);
-                cameraCallback = null;
-            }
+            if (cameraCallback) { cameraCallback(imageData); cameraCallback = null; }
         }
 
         function closeCamera() {
             const modal = document.getElementById('cameraModal');
             const video = document.getElementById('cameraFeed');
-            
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            video.srcObject = null;
-            modal.classList.add('hidden');
+            if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); cameraStream = null; }
+            if (video) video.srcObject = null;
+            if (modal) modal.classList.add('hidden');
             cameraCallback = null;
         }
 
         // ============================================
-        // CONFIGURATION
+        // CAMPUS DATA - REAL SCHOOLS
         // ============================================
         const CAMPUSES = [
-            "Alpha Austin",
-            "Alpha Dallas",
-            "Alpha Houston",
-            "Alpha San Francisco",
-            "Alpha Phoenix",
-            "Alpha Denver"
+            { name: "Alpha School Austin", state: "Texas", city: "Austin", cc: "Shannon Peifer", ccEmail: "shannon.peifer@alpha.school", ccPhone: "(813) 389-0593", owner: "Aaron Crute", ownerEmail: "aaron.crute@trilogy.com", ownerPhone: "(404) 449-5043" },
+            { name: "Alpha High School", state: "Texas", city: "Austin", cc: "Ian Huggins", ccEmail: "ian.huggins@alpha.school", ccPhone: "(971) 222-9736", owner: "Aaron Crute", ownerEmail: "aaron.crute@trilogy.com", ownerPhone: "(404) 449-5043" },
+            { name: "Alpha School Miami", state: "Florida", city: "Miami", cc: "Maria Mejia", ccEmail: "maria.mejia@alpha.school", ccPhone: "(305) 775-3375", owner: "Tara Stephenson", ownerEmail: "tara.stephenson@trilogy.com", ownerPhone: "(704) 974-1413" },
+            { name: "Alpha School Brownsville", state: "Texas", city: "Brownsville", cc: "Kathrine Ledesma", ccEmail: "kathrine.ledesma@alpha.school", ccPhone: "(956) 230-6648", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Texas Sports Academy", state: "Texas", city: "Austin", cc: "Cyndie Jensen", ccEmail: "cyndie.jensen@sportsacademy.school", ccPhone: "", owner: "Aaron Crute", ownerEmail: "aaron.crute@trilogy.com", ownerPhone: "(404) 449-5043" },
+            { name: "GT School", state: "Texas", city: "Georgetown", cc: "Keith Wong", ccEmail: "keith.wong@2hourlearning.com", ccPhone: "", owner: "Tara Stephenson", ownerEmail: "tara.stephenson@trilogy.com", ownerPhone: "(704) 974-1413" },
+            { name: "Nova Academy Austin", state: "Texas", city: "Austin", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Nova Academy Bastrop", state: "Texas", city: "Bastrop", cc: "Not Yet", ccEmail: "", ccPhone: "", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "NextGen Academy", state: "Texas", city: "Austin", cc: "Christopher Ahrens", ccEmail: "christopher.ahrens@esports.school", ccPhone: "(571) 645-9825", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Waypoint Academy", state: "Texas", city: "Dripping Springs", cc: "Natasha Lince", ccEmail: "natasha.lince@alpha.school", ccPhone: "(956) 292-5092", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Alpha School Scottsdale", state: "Arizona", city: "Scottsdale", cc: "Tetiana Vozniuk", ccEmail: "tetiana.pierson@alpha.school", ccPhone: "(503) 943-9317", owner: "Jake Petersen", ownerEmail: "jake.petersen@trilogy.com", ownerPhone: "(712) 309-1377" },
+            { name: "Alpha School Fort Worth", state: "Texas", city: "Fort Worth", cc: "Michaela Bosco", ccEmail: "michaela.bosco@alpha.school", ccPhone: "(817) 330-9327", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Alpha School San Francisco", state: "California", city: "San Francisco", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Jake Petersen", ownerEmail: "jake.petersen@trilogy.com", ownerPhone: "(712) 309-1377" },
+            { name: "Alpha School Palm Beach", state: "Florida", city: "Palm Beach", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Tara Stephenson", ownerEmail: "tara.stephenson@trilogy.com", ownerPhone: "(704) 974-1413" },
+            { name: "Alpha School Plano", state: "Texas", city: "Plano", cc: "May Dobbs", ccEmail: "may.dobbs@alpha.school", ccPhone: "(972) 246-8783", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Alpha Anywhere Center", state: "New York", city: "New York", cc: "Julianne Braime", ccEmail: "julianne.braime@alpha.school", ccPhone: "(805) 559-0131", owner: "Kevin Kongslie", ownerEmail: "kevin.kongslie@trilogy.com", ownerPhone: "(609) 933-6838" },
+            { name: "Alpha School Santa Barbara", state: "California", city: "Santa Barbara", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Jake Petersen", ownerEmail: "jake.petersen@trilogy.com", ownerPhone: "(712) 309-1377" },
+            { name: "Alpha School Chantilly", state: "Virginia", city: "Chantilly", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Jake Petersen", ownerEmail: "jake.petersen@trilogy.com", ownerPhone: "(712) 309-1377" },
+            { name: "Alpha School Charlotte", state: "North Carolina", city: "Charlotte", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Jake Petersen", ownerEmail: "jake.petersen@trilogy.com", ownerPhone: "(712) 309-1377" },
+            { name: "Alpha School Lake Forest", state: "California", city: "Lake Forest", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Jake Petersen", ownerEmail: "jake.petersen@trilogy.com", ownerPhone: "(712) 309-1377" },
+            { name: "Alpha School Raleigh", state: "North Carolina", city: "Raleigh", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Jake Petersen", ownerEmail: "jake.petersen@trilogy.com", ownerPhone: "(712) 309-1377" },
+            { name: "Alpha School Houston", state: "Texas", city: "Houston", cc: "Not Yet", ccEmail: "", ccPhone: "", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Alpha School Tampa", state: "Florida", city: "Tampa", cc: "Not Yet", ccEmail: "", ccPhone: "", owner: "JR Houston", ownerEmail: "jr.houston@trilogy.com", ownerPhone: "(321) 890-5650" },
+            { name: "Alpha School Orlando", state: "Florida", city: "Orlando", cc: "Not Yet", ccEmail: "", ccPhone: "", owner: "JR Houston", ownerEmail: "jr.houston@trilogy.com", ownerPhone: "(321) 890-5650" },
+            { name: "Montessorium Cedar Park", state: "Texas", city: "Cedar Park", cc: "Hiring CC", ccEmail: "", ccPhone: "", owner: "Randall Grant", ownerEmail: "randall.grant@trilogy.com", ownerPhone: "(850) 212-6957" },
+            { name: "Carrollton", state: "Texas", city: "Carrollton", cc: "Sara Leightman", ccEmail: "sara.leightman@sportsacademy.school", ccPhone: "(214) 392-8218", owner: "Kevin Kongslie", ownerEmail: "kevin.kongslie@trilogy.com", ownerPhone: "(609) 933-6838" }
         ];
 
         const ISSUE_CATEGORIES = [
@@ -99,7 +154,7 @@
             { id: 'odor', name: 'Odor Issue', icon: '👃', team: 'Housekeeping' },
             { id: 'plumbing', name: 'Plumbing', icon: '🚿', team: 'B&G' },
             { id: 'electrical', name: 'Electrical', icon: '⚡', team: 'B&G' },
-            { id: 'hvac', name: 'HVAC / Temperature', icon: '❄️', team: 'B&G' },
+            { id: 'hvac', name: 'HVAC / Temp', icon: '❄️', team: 'B&G' },
             { id: 'damage', name: 'Building Damage', icon: '🔨', team: 'B&G' },
             { id: 'safety', name: 'Safety Hazard', icon: '⚠️', team: 'Facilities Manager' },
             { id: 'pest', name: 'Pest Issue', icon: '🐛', team: 'Vendor' },
@@ -111,7 +166,7 @@
                 name: "Entry & Lobby",
                 type: "mandatory",
                 amberEligible: true,
-                description: "Parent-facing zone — 47-second arrival decision",
+                description: "Parent-facing zone",
                 cleanliness: [
                     "Floor free of debris, spills, and stains?",
                     "Entry mat clean and flat (no trip hazard)?",
@@ -139,10 +194,10 @@
                 ]
             },
             restroom_primary: {
-                name: "Restroom (Lobby / Primary)",
+                name: "Restroom (Primary)",
                 type: "mandatory",
                 amberEligible: false,
-                description: "Amber-Ineligible zone — any defect = Red",
+                description: "Any defect = RED",
                 cleanliness: [
                     "Toilets/urinals sanitary (no visible soil, stains, residue)?",
                     "Sinks and counters dry and clean?",
@@ -174,7 +229,7 @@
                 name: "Supply Closet",
                 type: "mandatory",
                 amberEligible: true,
-                description: "Inventory verification — 1-week minimum threshold",
+                description: "1-week minimum threshold",
                 isSupplyCheck: true,
                 cleanliness: [
                     "Toilet paper: 1-week supply available?",
@@ -190,7 +245,7 @@
                 name: "Restroom (Additional)",
                 type: "optional",
                 amberEligible: false,
-                description: "Amber-Ineligible zone — any defect = Red",
+                description: "Any defect = RED",
                 cleanliness: [
                     "Toilets/urinals sanitary?",
                     "Sinks and counters dry and clean?",
@@ -265,13 +320,28 @@
         const MANDATORY_ZONE_IDS = ['entry', 'hallway', 'restroom_primary', 'commons', 'supply_closet'];
         const OPTIONAL_ZONE_IDS = ['restroom_additional', 'classroom', 'office', 'gym', 'cafeteria'];
 
+        // Alpha Logo SVG
+        const ALPHA_LOGO = `<svg viewBox="0 0 200 60" class="h-12 w-auto">
+            <defs>
+                <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#e0e7ff;stop-opacity:1" />
+                </linearGradient>
+            </defs>
+            <polygon fill="url(#logoGrad)" points="10,30 25,10 40,20 55,5 50,25 60,30 50,35 55,55 40,40 25,50 10,30"/>
+            <rect fill="white" opacity="0.8" x="2" y="25" width="4" height="4"/>
+            <rect fill="white" opacity="0.6" x="0" y="32" width="3" height="3"/>
+            <rect fill="white" opacity="0.4" x="4" y="38" width="2" height="2"/>
+            <text x="70" y="28" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="bold">ALPHA</text>
+            <text x="70" y="48" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" opacity="0.9">FACILITIES</text>
+        </svg>`;
+
         // ============================================
         // APP STATE
         // ============================================
         let state = {
             screen: 'home',
-            // QC Audit state
-            campus: '',
+            campus: null,
             auditorName: '',
             startTime: null,
             selectedOptionalZones: [],
@@ -279,8 +349,7 @@
             zoneResults: {},
             conditionAlerts: [],
             tourReady: null,
-            // See It Report It state
-            reportCampus: '',
+            reportCampus: null,
             reportPhoto: null,
             reportCategory: null,
             reportLocation: '',
@@ -296,54 +365,39 @@
             audits.push(audit);
             localStorage.setItem('alpha_audits', JSON.stringify(audits));
         }
-
-        function getAudits() {
-            return JSON.parse(localStorage.getItem('alpha_audits') || '[]');
-        }
-
+        function getAudits() { return JSON.parse(localStorage.getItem('alpha_audits') || '[]'); }
         function saveReport(report) {
             const reports = JSON.parse(localStorage.getItem('alpha_reports') || '[]');
             reports.push(report);
             localStorage.setItem('alpha_reports', JSON.stringify(reports));
         }
-
-        function getReports() {
-            return JSON.parse(localStorage.getItem('alpha_reports') || '[]');
-        }
+        function getReports() { return JSON.parse(localStorage.getItem('alpha_reports') || '[]'); }
 
         // ============================================
         // STATUS CALCULATION
         // ============================================
         function calculateStatus() {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
-            let totalDefects = 0;
-            let hasAmberIneligibleDefect = false;
-
+            let totalDefects = 0, hasAmberIneligibleDefect = false;
             for (const zoneId of allZones) {
                 const zone = ZONES[zoneId];
                 const results = state.zoneResults[zoneId] || {};
                 const defects = Object.values(results).filter(v => v === 'no').length;
                 totalDefects += defects;
-                if (!zone.amberEligible && defects > 0) {
-                    hasAmberIneligibleDefect = true;
-                }
+                if (!zone.amberEligible && defects > 0) hasAmberIneligibleDefect = true;
             }
-
             if (state.tourReady === 'no') return 'RED';
             if (hasAmberIneligibleDefect) return 'RED';
             if (totalDefects === 0) return 'GREEN';
             if (totalDefects === 1) return 'AMBER';
             return 'RED';
         }
-
         function countDefects(zoneId) {
             const results = state.zoneResults[zoneId] || {};
             return Object.values(results).filter(v => v === 'no').length;
         }
-
         function getTotalDefects() {
-            const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
-            return allZones.reduce((sum, zoneId) => sum + countDefects(zoneId), 0);
+            return [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones].reduce((sum, zoneId) => sum + countDefects(zoneId), 0);
         }
 
         // ============================================
@@ -351,7 +405,6 @@
         // ============================================
         function render() {
             const app = document.getElementById('app');
-            
             switch(state.screen) {
                 case 'home': app.innerHTML = renderHome(); break;
                 case 'setup': app.innerHTML = renderSetup(); break;
@@ -368,8 +421,6 @@
                 case 'report_complete': app.innerHTML = renderReportComplete(); break;
                 case 'reports_list': app.innerHTML = renderReportsList(); break;
             }
-            
-            attachEventListeners();
         }
 
         function renderHome() {
@@ -378,42 +429,39 @@
             const openReports = reports.filter(r => r.status === 'open').length;
             
             return `
-                <div class="min-h-screen bg-gradient-to-b from-blue-800 to-blue-900 text-white">
-                    <div class="p-6 pt-12">
-                        <h1 class="text-3xl font-bold mb-1">Alpha Facilities</h1>
-                        <p class="text-blue-200">Cleanliness & Issue Management</p>
+                <div class="min-h-screen alpha-gradient text-white">
+                    <div class="p-6 pt-10 pb-4">
+                        ${ALPHA_LOGO}
                     </div>
                     
-                    <div class="p-6 space-y-4">
-                        <!-- See It Report It -->
-                        <button onclick="startReport()" class="w-full bg-red-500 text-white py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center">
+                    <div class="px-6 space-y-3">
+                        <button onclick="startReport()" class="w-full bg-red-500 hover:bg-red-600 text-white py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center transition-colors">
                             <span class="text-2xl mr-3">📸</span>
                             See It, Report It
                         </button>
                         
-                        <!-- Daily QC -->
-                        <button onclick="startAudit()" class="w-full bg-white text-blue-800 py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center">
+                        <button onclick="startAudit()" class="w-full bg-white hover:bg-gray-50 text-alpha-500 py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center transition-colors">
                             <span class="text-2xl mr-3">✅</span>
                             Daily QC Walkthrough
                         </button>
-                        
-                        <!-- Quick Stats -->
-                        <div class="grid grid-cols-2 gap-3 mt-6">
-                            <button onclick="goToHistory()" class="bg-blue-700/50 p-4 rounded-xl text-left">
+                    </div>
+                    
+                    <div class="px-6 py-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="goToHistory()" class="bg-white/10 hover:bg-white/20 backdrop-blur p-4 rounded-xl text-left transition-colors">
                                 <div class="text-3xl font-bold">${audits.length}</div>
-                                <div class="text-blue-200 text-sm">QC Audits</div>
+                                <div class="text-alpha-200 text-sm">QC Audits</div>
                             </button>
-                            <button onclick="goToReportsList()" class="bg-blue-700/50 p-4 rounded-xl text-left">
+                            <button onclick="goToReportsList()" class="bg-white/10 hover:bg-white/20 backdrop-blur p-4 rounded-xl text-left transition-colors">
                                 <div class="text-3xl font-bold">${reports.length}</div>
-                                <div class="text-blue-200 text-sm">Issues Reported</div>
+                                <div class="text-alpha-200 text-sm">Issues Reported</div>
                                 ${openReports > 0 ? `<div class="text-yellow-300 text-xs mt-1">${openReports} open</div>` : ''}
                             </button>
                         </div>
                     </div>
                     
-                    <!-- Recent Activity -->
-                    <div class="bg-white text-gray-800 rounded-t-3xl mt-4 p-6 min-h-[250px]">
-                        <h2 class="font-bold text-lg mb-4">Recent Activity</h2>
+                    <div class="bg-white text-gray-800 rounded-t-3xl mt-2 p-6 min-h-[280px]">
+                        <h2 class="font-bold text-lg mb-4 text-alpha-600">Recent Activity</h2>
                         ${renderRecentActivity(audits, reports)}
                     </div>
                 </div>
@@ -427,47 +475,62 @@
             ].sort((a, b) => b.sortDate - a.sortDate).slice(0, 5);
 
             if (combined.length === 0) {
-                return `
-                    <div class="text-center py-8 text-gray-400">
-                        <div class="text-4xl mb-2">📋</div>
-                        <p>No activity yet</p>
-                    </div>
-                `;
+                return `<div class="text-center py-8 text-gray-400">
+                    <div class="text-4xl mb-2">📋</div>
+                    <p>No activity yet</p>
+                </div>`;
             }
 
+            return `<div class="space-y-3">${combined.map(item => {
+                if (item.type === 'audit') {
+                    return `<div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                        <span class="text-2xl mr-3">${item.status === 'GREEN' ? '🟢' : item.status === 'AMBER' ? '🟡' : '🔴'}</span>
+                        <div class="flex-1">
+                            <div class="font-medium">${item.campus}</div>
+                            <div class="text-sm text-gray-500">${item.date} • ${item.defects} defect${item.defects !== 1 ? 's' : ''}</div>
+                        </div>
+                    </div>`;
+                } else {
+                    const cat = ISSUE_CATEGORIES.find(c => c.id === item.category) || { icon: '❓', name: 'Issue' };
+                    return `<div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                        <span class="text-2xl mr-3">${cat.icon}</span>
+                        <div class="flex-1">
+                            <div class="font-medium">${cat.name}</div>
+                            <div class="text-sm text-gray-500">${item.campus}</div>
+                        </div>
+                        <span class="text-xs px-2 py-1 rounded ${item.status === 'open' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${item.status}</span>
+                    </div>`;
+                }
+            }).join('')}</div>`;
+        }
+
+        // ============================================
+        // CAMPUS SELECTOR
+        // ============================================
+        function renderCampusSelector(selectedName, inputId) {
+            // Group by state
+            const byState = {};
+            CAMPUSES.forEach(c => {
+                if (!byState[c.state]) byState[c.state] = [];
+                byState[c.state].push(c);
+            });
+            
             return `
-                <div class="space-y-3">
-                    ${combined.map(item => {
-                        if (item.type === 'audit') {
-                            return `
-                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
-                                    <span class="text-2xl mr-3">${item.status === 'GREEN' ? '🟢' : item.status === 'AMBER' ? '🟡' : '🔴'}</span>
-                                    <div class="flex-1">
-                                        <div class="font-medium">QC: ${item.campus}</div>
-                                        <div class="text-sm text-gray-500">${item.date} • ${item.defects} defect${item.defects !== 1 ? 's' : ''}</div>
-                                    </div>
-                                </div>
-                            `;
-                        } else {
-                            const cat = ISSUE_CATEGORIES.find(c => c.id === item.category) || { icon: '❓', name: 'Issue' };
-                            return `
-                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
-                                    <span class="text-2xl mr-3">${cat.icon}</span>
-                                    <div class="flex-1">
-                                        <div class="font-medium">${cat.name}</div>
-                                        <div class="text-sm text-gray-500">${item.campus} • ${item.location || 'No location'}</div>
-                                    </div>
-                                    <span class="text-xs px-2 py-1 rounded ${item.status === 'open' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${item.status}</span>
-                                </div>
-                            `;
-                        }
-                    }).join('')}
-                </div>
+                <select id="${inputId}" class="w-full border border-gray-300 rounded-lg p-3 text-lg bg-white">
+                    <option value="">Select campus...</option>
+                    ${Object.keys(byState).sort().map(state => `
+                        <optgroup label="${state}">
+                            ${byState[state].map(c => `
+                                <option value="${c.name}" ${selectedName === c.name ? 'selected' : ''}>${c.name} — ${c.city}</option>
+                            `).join('')}
+                        </optgroup>
+                    `).join('')}
+                </select>
             `;
         }
 
         // ============================================
-        // SEE IT REPORT IT SCREENS
+        // SEE IT REPORT IT
         // ============================================
         function renderReportStart() {
             return `
@@ -481,33 +544,18 @@
                             </div>
                         </div>
                     </div>
-                    
                     <div class="p-4 space-y-4">
                         <div class="bg-white rounded-lg p-6 shadow text-center">
                             <div class="text-6xl mb-4">📸</div>
                             <h2 class="text-xl font-bold mb-2">Snap a Photo</h2>
-                            <p class="text-gray-600 mb-6">Take a photo of the issue. It will be automatically analyzed and routed to the right team.</p>
-                            
-                            <div class="space-y-3 mb-6">
-                                <label class="block text-left text-sm font-medium text-gray-700">Campus *</label>
-                                <select id="reportCampus" class="w-full border border-gray-300 rounded-lg p-3 text-lg bg-white">
-                                    <option value="">Select campus...</option>
-                                    ${CAMPUSES.map(c => `<option value="${c}">${c}</option>`).join('')}
-                                </select>
+                            <p class="text-gray-600 mb-6">Take a photo of the issue and we'll route it to the right team.</p>
+                            <div class="space-y-3 mb-6 text-left">
+                                <label class="block text-sm font-medium text-gray-700">Campus *</label>
+                                ${renderCampusSelector(state.reportCampus?.name, 'reportCampus')}
                             </div>
-                            
                             <button onclick="openReportCamera()" class="w-full bg-red-500 text-white py-4 rounded-xl text-lg font-bold">
-                                📷 Open Camera
+                                📷 Take Photo
                             </button>
-                        </div>
-                        
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <div class="text-sm text-blue-800">
-                                <strong>How it works:</strong><br>
-                                1. Take a photo of the issue<br>
-                                2. Select category and add details<br>
-                                3. Submit — right team gets notified
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -522,32 +570,24 @@
                             <button onclick="state.screen='report_start'; render();" class="text-2xl mr-3">←</button>
                             <div>
                                 <h1 class="text-xl font-bold">Review Photo</h1>
-                                <p class="text-red-100 text-sm">${state.reportCampus}</p>
+                                <p class="text-red-100 text-sm">${state.reportCampus?.name || ''}</p>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="p-4 space-y-4">
                         ${state.reportPhoto ? `
                             <div class="rounded-lg overflow-hidden shadow">
                                 <img src="${state.reportPhoto}" alt="Issue photo" class="w-full">
                             </div>
-                            
                             <div class="flex gap-3">
-                                <button onclick="retakePhoto()" class="flex-1 bg-gray-200 py-3 rounded-lg font-medium">
-                                    🔄 Retake
-                                </button>
-                                <button onclick="state.screen='report_details'; render();" class="flex-1 bg-red-500 text-white py-3 rounded-lg font-medium">
-                                    Continue →
-                                </button>
+                                <button onclick="retakePhoto()" class="flex-1 bg-gray-200 py-3 rounded-lg font-medium">🔄 Retake</button>
+                                <button onclick="state.screen='report_details'; render();" class="flex-1 bg-red-500 text-white py-3 rounded-lg font-medium">Continue →</button>
                             </div>
                         ` : `
                             <div class="bg-white rounded-lg p-12 text-center text-gray-400">
                                 <div class="text-6xl mb-4">📷</div>
                                 <p>No photo captured</p>
-                                <button onclick="openReportCamera()" class="mt-4 bg-red-500 text-white px-6 py-2 rounded-lg">
-                                    Open Camera
-                                </button>
+                                <button onclick="openReportCamera()" class="mt-4 bg-red-500 text-white px-6 py-2 rounded-lg">Take Photo</button>
                             </div>
                         `}
                     </div>
@@ -563,21 +603,16 @@
                             <button onclick="state.screen='report_photo'; render();" class="text-2xl mr-3">←</button>
                             <div>
                                 <h1 class="text-xl font-bold">Issue Details</h1>
-                                <p class="text-red-100 text-sm">${state.reportCampus}</p>
+                                <p class="text-red-100 text-sm">${state.reportCampus?.name || ''}</p>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="p-4 space-y-4">
-                        <!-- Photo thumbnail -->
-                        ${state.reportPhoto ? `
-                            <div class="flex items-center bg-white rounded-lg p-3 shadow">
-                                <img src="${state.reportPhoto}" alt="Issue" class="w-16 h-16 object-cover rounded mr-3">
-                                <div class="text-sm text-gray-600">Photo captured ✓</div>
-                            </div>
-                        ` : ''}
+                        ${state.reportPhoto ? `<div class="flex items-center bg-white rounded-lg p-3 shadow">
+                            <img src="${state.reportPhoto}" alt="Issue" class="w-16 h-16 object-cover rounded mr-3">
+                            <div class="text-sm text-gray-600">Photo captured ✓</div>
+                        </div>` : ''}
                         
-                        <!-- Category Selection -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">What type of issue? *</label>
                             <div class="grid grid-cols-3 gap-2">
@@ -590,44 +625,36 @@
                             </div>
                         </div>
                         
-                        <!-- Location -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Location *</label>
-                            <input type="text" id="reportLocation" value="${state.reportLocation}" placeholder="e.g., 2nd floor restroom, Room 204, Main hallway" class="w-full border border-gray-300 rounded-lg p-3">
+                            <input type="text" id="reportLocation" value="${state.reportLocation}" placeholder="e.g., 2nd floor restroom, Room 204" class="w-full border border-gray-300 rounded-lg p-3">
                         </div>
                         
-                        <!-- Notes -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Additional Notes (optional)</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
                             <textarea id="reportNote" placeholder="Any additional details..." class="w-full border border-gray-300 rounded-lg p-3" rows="2">${state.reportNote}</textarea>
                         </div>
                         
-                        <!-- Urgent toggle -->
                         <div class="bg-white rounded-lg p-4 shadow">
-                            <label class="flex items-center cursor-pointer">
-                                <input type="checkbox" id="reportUrgent" ${state.reportUrgent ? 'checked' : ''} class="sr-only">
-                                <div class="w-12 h-6 rounded-full mr-3 ${state.reportUrgent ? 'bg-red-500' : 'bg-gray-300'}" onclick="toggleUrgent()">
+                            <label class="flex items-center cursor-pointer" onclick="toggleUrgent()">
+                                <div class="w-12 h-6 rounded-full mr-3 ${state.reportUrgent ? 'bg-red-500' : 'bg-gray-300'}">
                                     <div class="w-5 h-5 bg-white rounded-full shadow transform transition-transform ${state.reportUrgent ? 'translate-x-6' : 'translate-x-1'}" style="margin-top: 2px;"></div>
                                 </div>
                                 <div>
-                                    <div class="font-medium">🚨 Urgent / Safety Hazard</div>
+                                    <div class="font-medium">🚨 Urgent / Safety</div>
                                     <div class="text-sm text-gray-500">Requires immediate attention</div>
                                 </div>
                             </label>
                         </div>
                         
-                        ${state.reportCategory ? `
-                            <div class="bg-gray-50 rounded-lg p-3">
-                                <div class="text-sm text-gray-600">
-                                    <strong>Routes to:</strong> ${ISSUE_CATEGORIES.find(c => c.id === state.reportCategory)?.team || 'Facilities'}
-                                </div>
-                            </div>
-                        ` : ''}
+                        ${state.reportCategory ? `<div class="bg-alpha-50 rounded-lg p-3 border border-alpha-200">
+                            <div class="text-sm text-alpha-700"><strong>Routes to:</strong> ${ISSUE_CATEGORIES.find(c => c.id === state.reportCategory)?.team || 'Facilities'}</div>
+                        </div>` : ''}
                     </div>
                     
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
                         <button onclick="submitReport()" class="w-full py-4 rounded-xl text-lg font-bold ${canSubmitReport() ? 'bg-red-500 text-white' : 'bg-gray-300 text-gray-500'}" ${canSubmitReport() ? '' : 'disabled'}>
-                            ${state.reportUrgent ? '🚨 Submit Urgent Report' : '✓ Submit Report'}
+                            ${state.reportUrgent ? '🚨 Submit Urgent' : '✓ Submit Report'}
                         </button>
                     </div>
                 </div>
@@ -639,21 +666,17 @@
             return `
                 <div class="min-h-screen bg-green-500 flex flex-col items-center justify-center p-8 text-white text-center">
                     <div class="text-8xl mb-6">✅</div>
-                    <h1 class="text-3xl font-bold mb-2">Report Submitted!</h1>
-                    <p class="text-lg opacity-90 mb-4">${cat?.team || 'Facilities'} has been notified</p>
-                    
+                    <h1 class="text-3xl font-bold mb-2">Submitted!</h1>
+                    <p class="text-lg opacity-90 mb-4">${cat?.team || 'Facilities'} notified</p>
                     <div class="bg-white/20 rounded-lg p-4 mb-8 w-full max-w-sm text-left">
                         <div class="flex items-center mb-2">
                             <span class="text-2xl mr-2">${cat?.icon || '📋'}</span>
                             <span class="font-bold">${cat?.name || 'Issue'}</span>
                         </div>
-                        <div class="text-sm opacity-90">${state.reportCampus}</div>
+                        <div class="text-sm opacity-90">${state.reportCampus?.name || ''}</div>
                         <div class="text-sm opacity-90">${state.reportLocation}</div>
                     </div>
-                    
-                    <button onclick="goHome()" class="bg-white text-green-600 px-8 py-3 rounded-lg font-bold">
-                        Done
-                    </button>
+                    <button onclick="goHome()" class="bg-white text-green-600 px-8 py-3 rounded-lg font-bold">Done</button>
                 </div>
             `;
         }
@@ -668,102 +691,76 @@
                             <h1 class="text-xl font-bold">Reported Issues</h1>
                         </div>
                     </div>
-                    
                     <div class="p-4">
-                        ${reports.length === 0 ? `
-                            <div class="text-center py-12 text-gray-400">
-                                <div class="text-5xl mb-4">📸</div>
-                                <p>No issues reported yet</p>
-                            </div>
-                        ` : `
-                            <div class="space-y-3">
-                                ${reports.map(r => {
-                                    const cat = ISSUE_CATEGORIES.find(c => c.id === r.category) || { icon: '❓', name: 'Issue' };
-                                    return `
-                                        <div class="bg-white rounded-lg p-4 shadow">
-                                            <div class="flex items-start">
-                                                ${r.photo ? `<img src="${r.photo}" alt="Issue" class="w-16 h-16 object-cover rounded mr-3">` : ''}
-                                                <div class="flex-1">
-                                                    <div class="flex items-center justify-between mb-1">
-                                                        <span class="font-bold flex items-center">
-                                                            <span class="mr-2">${cat.icon}</span>
-                                                            ${cat.name}
-                                                        </span>
-                                                        <span class="text-xs px-2 py-1 rounded ${r.status === 'open' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${r.status}</span>
-                                                    </div>
-                                                    <div class="text-sm text-gray-600">${r.campus}</div>
-                                                    <div class="text-sm text-gray-500">${r.location}</div>
-                                                    <div class="text-xs text-gray-400 mt-1">${r.timestamp} • ${r.team}</div>
-                                                    ${r.urgent ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded mt-2 inline-block">🚨 Urgent</span>' : ''}
-                                                </div>
-                                            </div>
+                        ${reports.length === 0 ? `<div class="text-center py-12 text-gray-400">
+                            <div class="text-5xl mb-4">📸</div><p>No issues reported</p>
+                        </div>` : `<div class="space-y-3">${reports.map(r => {
+                            const cat = ISSUE_CATEGORIES.find(c => c.id === r.category) || { icon: '❓', name: 'Issue' };
+                            return `<div class="bg-white rounded-lg p-4 shadow">
+                                <div class="flex items-start">
+                                    ${r.photo ? `<img src="${r.photo}" alt="Issue" class="w-16 h-16 object-cover rounded mr-3">` : ''}
+                                    <div class="flex-1">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="font-bold">${cat.icon} ${cat.name}</span>
+                                            <span class="text-xs px-2 py-1 rounded ${r.status === 'open' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${r.status}</span>
                                         </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        `}
+                                        <div class="text-sm text-gray-600">${r.campus}</div>
+                                        <div class="text-sm text-gray-500">${r.location}</div>
+                                        <div class="text-xs text-gray-400 mt-1">${r.timestamp}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                        }).join('')}</div>`}
                     </div>
                 </div>
             `;
         }
 
         // ============================================
-        // QC AUDIT SCREENS (same as before but condensed)
+        // QC AUDIT SCREENS
         // ============================================
         function renderSetup() {
             return `
                 <div class="min-h-screen bg-gray-100">
-                    <div class="bg-blue-800 text-white p-4">
+                    <div class="alpha-gradient text-white p-4">
                         <div class="flex items-center">
                             <button onclick="goHome()" class="text-2xl mr-3">←</button>
                             <div>
-                                <h1 class="text-xl font-bold">Setup Audit</h1>
-                                <p class="text-blue-200 text-sm">Select campus and zones</p>
+                                <h1 class="text-xl font-bold">Daily QC Setup</h1>
+                                <p class="text-alpha-200 text-sm">Select campus and zones</p>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="p-4 space-y-6">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Campus *</label>
-                            <select id="campus" class="w-full border border-gray-300 rounded-lg p-3 text-lg bg-white">
-                                <option value="">Select campus...</option>
-                                ${CAMPUSES.map(c => `<option value="${c}">${c}</option>`).join('')}
-                            </select>
+                            ${renderCampusSelector(state.campus?.name, 'campus')}
                         </div>
-                        
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Your Name *</label>
-                            <input type="text" id="auditorName" placeholder="Enter your name" class="w-full border border-gray-300 rounded-lg p-3 text-lg">
+                            <input type="text" id="auditorName" placeholder="Enter your name" value="${state.auditorName}" class="w-full border border-gray-300 rounded-lg p-3 text-lg">
                         </div>
-                        
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Mandatory Zones (5)</label>
-                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-                                ${MANDATORY_ZONE_IDS.map(id => `
-                                    <div class="flex items-center">
-                                        <span class="text-blue-500 mr-2">✓</span>
-                                        <span>${ZONES[id].name}</span>
-                                        ${!ZONES[id].amberEligible ? '<span class="ml-auto text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️ RED zone</span>' : ''}
-                                    </div>
-                                `).join('')}
+                            <div class="bg-alpha-50 border border-alpha-200 rounded-lg p-3 space-y-2">
+                                ${MANDATORY_ZONE_IDS.map(id => `<div class="flex items-center">
+                                    <span class="text-alpha-500 mr-2">✓</span>
+                                    <span>${ZONES[id].name}</span>
+                                    ${!ZONES[id].amberEligible ? '<span class="ml-auto text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️ RED</span>' : ''}
+                                </div>`).join('')}
                             </div>
                         </div>
-                        
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Optional Zones</label>
                             <div class="space-y-2">
-                                ${OPTIONAL_ZONE_IDS.map(id => `
-                                    <label class="flex items-center p-3 bg-white rounded-lg border border-gray-200 cursor-pointer">
-                                        <input type="checkbox" value="${id}" class="optional-zone w-5 h-5 mr-3">
-                                        <span class="flex-1">${ZONES[id].name}</span>
-                                        ${!ZONES[id].amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️</span>' : ''}
-                                    </label>
-                                `).join('')}
+                                ${OPTIONAL_ZONE_IDS.map(id => `<label class="flex items-center p-3 bg-white rounded-lg border border-gray-200 cursor-pointer">
+                                    <input type="checkbox" value="${id}" class="optional-zone w-5 h-5 mr-3 accent-alpha-500">
+                                    <span class="flex-1">${ZONES[id].name}</span>
+                                    ${!ZONES[id].amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️</span>' : ''}
+                                </label>`).join('')}
                             </div>
                         </div>
-                        
-                        <button onclick="beginAudit()" class="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold">
+                        <button onclick="beginAudit()" class="w-full bg-alpha-500 hover:bg-alpha-600 text-white py-4 rounded-xl text-lg font-bold transition-colors">
                             Begin Walkthrough
                         </button>
                     </div>
@@ -775,50 +772,39 @@
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
-                    <div class="bg-blue-800 text-white p-4">
+                    <div class="alpha-gradient text-white p-4">
                         <div class="flex items-center">
                             <button onclick="confirmExit()" class="text-2xl mr-3">←</button>
                             <div>
-                                <h1 class="text-xl font-bold">${state.campus}</h1>
-                                <p class="text-blue-200 text-sm">Daily QC Walkthrough</p>
+                                <h1 class="text-xl font-bold">${state.campus?.name || ''}</h1>
+                                <p class="text-alpha-200 text-sm">${state.campus?.city || ''}, ${state.campus?.state || ''}</p>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="bg-white p-4 border-b">
                         <div class="flex justify-between text-sm text-gray-600 mb-2">
                             <span>Progress</span>
                             <span>${Object.keys(state.zoneResults).length} of ${allZones.length} zones</span>
                         </div>
                         <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div class="h-full bg-blue-500 transition-all" style="width: ${(Object.keys(state.zoneResults).length / allZones.length) * 100}%"></div>
+                            <div class="h-full bg-alpha-500 transition-all" style="width: ${(Object.keys(state.zoneResults).length / allZones.length) * 100}%"></div>
                         </div>
                     </div>
-                    
                     <div class="p-4">
                         <h2 class="font-bold text-gray-700 mb-3">Mandatory Zones</h2>
                         <div class="space-y-2 mb-6">
                             ${MANDATORY_ZONE_IDS.map((id, idx) => renderZoneCard(id, idx)).join('')}
                         </div>
-                        
                         ${state.selectedOptionalZones.length > 0 ? `
                             <h2 class="font-bold text-gray-700 mb-3">Optional Zones</h2>
-                            <div class="space-y-2">
-                                ${state.selectedOptionalZones.map((id, idx) => renderZoneCard(id, MANDATORY_ZONE_IDS.length + idx)).join('')}
-                            </div>
+                            <div class="space-y-2">${state.selectedOptionalZones.map((id, idx) => renderZoneCard(id, MANDATORY_ZONE_IDS.length + idx)).join('')}</div>
                         ` : ''}
                     </div>
-                    
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
-                        ${Object.keys(state.zoneResults).length === allZones.length ? `
-                            <button onclick="goToTourReady()" class="w-full bg-green-500 text-white py-4 rounded-xl text-lg font-bold">
-                                Continue to Final Question →
-                            </button>
-                        ` : `
-                            <button onclick="goToNextIncomplete()" class="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold">
-                                ${Object.keys(state.zoneResults).length === 0 ? 'Start First Zone' : 'Continue to Next Zone'} →
-                            </button>
-                        `}
+                        ${Object.keys(state.zoneResults).length === allZones.length ? 
+                            `<button onclick="goToTourReady()" class="w-full bg-green-500 text-white py-4 rounded-xl text-lg font-bold">Final Question →</button>` : 
+                            `<button onclick="goToNextIncomplete()" class="w-full bg-alpha-500 text-white py-4 rounded-xl text-lg font-bold">${Object.keys(state.zoneResults).length === 0 ? 'Start First Zone' : 'Continue'} →</button>`
+                        }
                     </div>
                 </div>
             `;
@@ -829,19 +815,16 @@
             const results = state.zoneResults[zoneId];
             const isComplete = results !== undefined;
             const defects = isComplete ? countDefects(zoneId) : 0;
-            
-            return `
-                <button onclick="goToZone(${index})" class="w-full ${isComplete ? (defects === 0 ? 'bg-green-50' : 'bg-red-50') : 'bg-white'} p-4 rounded-lg border border-gray-200 flex items-center text-left">
-                    <span class="w-8 h-8 rounded-full ${isComplete ? (defects === 0 ? 'bg-green-500' : 'bg-red-500') : 'bg-gray-200'} text-white flex items-center justify-center mr-3 font-bold text-sm">
-                        ${isComplete ? (defects === 0 ? '✓' : defects) : index + 1}
-                    </span>
-                    <div class="flex-1">
-                        <div class="font-medium">${zone.name}</div>
-                        ${zone.description ? `<div class="text-xs text-gray-500">${zone.description}</div>` : ''}
-                    </div>
-                    ${!zone.amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️</span>' : ''}
-                </button>
-            `;
+            return `<button onclick="goToZone(${index})" class="w-full ${isComplete ? (defects === 0 ? 'bg-green-50' : 'bg-red-50') : 'bg-white'} p-4 rounded-lg border border-gray-200 flex items-center text-left">
+                <span class="w-8 h-8 rounded-full ${isComplete ? (defects === 0 ? 'bg-green-500' : 'bg-red-500') : 'bg-gray-200'} text-white flex items-center justify-center mr-3 font-bold text-sm">
+                    ${isComplete ? (defects === 0 ? '✓' : defects) : index + 1}
+                </span>
+                <div class="flex-1">
+                    <div class="font-medium">${zone.name}</div>
+                    ${zone.description ? `<div class="text-xs text-gray-500">${zone.description}</div>` : ''}
+                </div>
+                ${!zone.amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️</span>' : ''}
+            </button>`;
         }
 
         function renderZone() {
@@ -849,51 +832,34 @@
             const zoneId = allZones[state.currentZoneIndex];
             const zone = ZONES[zoneId];
             const results = state.zoneResults[zoneId] || {};
-            
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
-                    <div class="bg-blue-800 text-white p-4">
+                    <div class="alpha-gradient text-white p-4">
                         <div class="flex items-center justify-between">
                             <button onclick="goToAuditOverview()" class="text-2xl">←</button>
                             <div class="text-center">
                                 <h1 class="text-lg font-bold">${zone.name}</h1>
-                                <p class="text-blue-200 text-sm">Zone ${state.currentZoneIndex + 1} of ${allZones.length}</p>
+                                <p class="text-alpha-200 text-sm">Zone ${state.currentZoneIndex + 1} of ${allZones.length}</p>
                             </div>
                             <div class="w-8"></div>
                         </div>
                     </div>
-                    
-                    <div class="h-1 bg-gray-200">
-                        <div class="h-full bg-blue-500" style="width: ${((state.currentZoneIndex + 1) / allZones.length) * 100}%"></div>
-                    </div>
-                    
-                    ${!zone.amberEligible ? `
-                        <div class="bg-red-100 border-l-4 border-red-500 p-3 m-4 rounded">
-                            <div class="font-medium text-red-800">⚠️ Any defect = RED status</div>
-                        </div>
-                    ` : ''}
-                    
+                    <div class="h-1 bg-gray-200"><div class="h-full bg-alpha-500" style="width: ${((state.currentZoneIndex + 1) / allZones.length) * 100}%"></div></div>
+                    ${!zone.amberEligible ? `<div class="bg-red-100 border-l-4 border-red-500 p-3 m-4 rounded"><div class="font-medium text-red-800">⚠️ Any defect = RED status</div></div>` : ''}
                     <div class="p-4">
                         <div class="space-y-3">
-                            ${zone.cleanliness.map((q, idx) => `
-                                <div class="bg-white rounded-lg p-4 shadow-sm">
-                                    <div class="text-sm mb-3">${idx + 1}. ${q}</div>
-                                    <div class="flex gap-2">
-                                        <button onclick="setResponse('${zoneId}', ${idx}, 'yes')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'yes' ? 'bg-green-500 text-white' : 'bg-gray-100'}">
-                                            ✓ Yes
-                                        </button>
-                                        <button onclick="setResponse('${zoneId}', ${idx}, 'no')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'no' ? 'bg-red-500 text-white' : 'bg-gray-100'}">
-                                            ✗ No
-                                        </button>
-                                    </div>
+                            ${zone.cleanliness.map((q, idx) => `<div class="bg-white rounded-lg p-4 shadow-sm">
+                                <div class="text-sm mb-3">${idx + 1}. ${q}</div>
+                                <div class="flex gap-2">
+                                    <button onclick="setResponse('${zoneId}', ${idx}, 'yes')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'yes' ? 'bg-green-500 text-white' : 'bg-gray-100'}">✓ Yes</button>
+                                    <button onclick="setResponse('${zoneId}', ${idx}, 'no')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'no' ? 'bg-red-500 text-white' : 'bg-gray-100'}">✗ No</button>
                                 </div>
-                            `).join('')}
+                            </div>`).join('')}
                         </div>
                     </div>
-                    
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
-                        <button onclick="completeZone('${zoneId}')" class="w-full py-4 rounded-xl text-lg font-bold ${isZoneComplete(zoneId) ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}" ${isZoneComplete(zoneId) ? '' : 'disabled'}>
-                            ${isZoneComplete(zoneId) ? 'Complete Zone → Condition Check' : `Answer all (${Object.keys(results).length}/${zone.cleanliness.length})`}
+                        <button onclick="completeZone('${zoneId}')" class="w-full py-4 rounded-xl text-lg font-bold ${isZoneComplete(zoneId) ? 'bg-alpha-500 text-white' : 'bg-gray-300 text-gray-500'}" ${isZoneComplete(zoneId) ? '' : 'disabled'}>
+                            ${isZoneComplete(zoneId) ? 'Complete Zone →' : `Answer all (${Object.keys(results).length}/${zone.cleanliness.length})`}
                         </button>
                     </div>
                 </div>
@@ -905,74 +871,56 @@
             const zoneId = allZones[state.currentZoneIndex];
             const zone = ZONES[zoneId];
             const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
-            
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
                     <div class="bg-orange-500 text-white p-4">
                         <div class="flex items-center">
                             <button onclick="goToZone(${state.currentZoneIndex})" class="text-2xl mr-3">←</button>
                             <div>
-                                <h1 class="text-xl font-bold">Condition Alert</h1>
+                                <h1 class="text-xl font-bold">Building Check</h1>
                                 <p class="text-orange-100 text-sm">${zone.name}</p>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="p-4 space-y-4">
                         <div class="bg-white rounded-lg p-6 shadow">
-                            <div class="text-lg font-medium mb-4">Would you route a tour away from this zone due to building condition?</div>
-                            
+                            <div class="text-lg font-medium mb-4">Any building issues to flag for B&G?</div>
+                            <p class="text-sm text-gray-500 mb-4">Examples: holes in walls, broken fixtures, damaged flooring, water damage</p>
                             <div class="space-y-3">
                                 <button onclick="setConditionAlert('${zoneId}', false)" class="w-full p-4 rounded-lg border-2 ${alert?.hasIssue === false ? 'border-green-500 bg-green-50' : 'border-gray-200'} flex items-center">
                                     <span class="text-2xl mr-3">✓</span>
-                                    <div class="text-left">
-                                        <div class="font-medium">No — Condition OK</div>
-                                    </div>
+                                    <div class="font-medium">No issues</div>
                                 </button>
-                                
-                                <button onclick="setConditionAlert('${zoneId}', true)" class="w-full p-4 rounded-lg border-2 ${alert?.hasIssue === true ? 'border-red-500 bg-red-50' : 'border-gray-200'} flex items-center">
-                                    <span class="text-2xl mr-3">⚠️</span>
+                                <button onclick="setConditionAlert('${zoneId}', true)" class="w-full p-4 rounded-lg border-2 ${alert?.hasIssue === true ? 'border-orange-500 bg-orange-50' : 'border-gray-200'} flex items-center">
+                                    <span class="text-2xl mr-3">🔧</span>
                                     <div class="text-left">
-                                        <div class="font-medium">Yes — Condition Issue</div>
-                                        <div class="text-sm text-gray-500">Photo required</div>
+                                        <div class="font-medium">Yes — flag for B&G</div>
+                                        <div class="text-sm text-gray-500">Photo + description required</div>
                                     </div>
                                 </button>
                             </div>
                         </div>
-                        
-                        ${alert?.hasIssue === true ? `
-                            <div class="bg-white rounded-lg p-4 shadow slide-up">
-                                <!-- Photo -->
-                                <div class="mb-4">
-                                    ${alert.photo ? `
-                                        <div class="relative">
-                                            <img src="${alert.photo}" alt="Condition issue" class="w-full rounded-lg">
-                                            <button onclick="takeConditionPhoto('${zoneId}')" class="absolute bottom-2 right-2 bg-white px-3 py-1 rounded-lg text-sm shadow">🔄 Retake</button>
-                                        </div>
-                                    ` : `
-                                        <button onclick="takeConditionPhoto('${zoneId}')" class="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                                            <div class="text-4xl mb-2">📷</div>
-                                            <div class="font-medium">Tap to Take Photo</div>
-                                        </button>
-                                    `}
-                                </div>
-                                
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Describe the issue *</label>
-                                <input type="text" id="conditionNote" maxlength="100" placeholder="e.g., Hole in drywall near door" class="w-full border border-gray-300 rounded-lg p-3" value="${alert.note || ''}" oninput="updateConditionNote(this.value)">
-                                <div class="text-xs text-gray-400 mt-1 text-right">${(alert.note || '').length}/100</div>
+                        ${alert?.hasIssue === true ? `<div class="bg-white rounded-lg p-4 shadow slide-up">
+                            <div class="mb-4">
+                                ${alert.photo ? `<div class="relative">
+                                    <img src="${alert.photo}" alt="Issue" class="w-full rounded-lg">
+                                    <button onclick="takeConditionPhoto('${zoneId}')" class="absolute bottom-2 right-2 bg-white px-3 py-1 rounded-lg text-sm shadow">🔄 Retake</button>
+                                </div>` : `<button onclick="takeConditionPhoto('${zoneId}')" class="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                                    <div class="text-4xl mb-2">📷</div>
+                                    <div class="font-medium">Tap to Take Photo</div>
+                                </button>`}
                             </div>
-                        ` : ''}
-                        
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <div class="text-sm text-blue-800">
-                                Condition alerts route to B&G and do NOT affect cleanliness score.
-                            </div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Describe the issue *</label>
+                            <input type="text" id="conditionNote" maxlength="100" placeholder="e.g., Hole in drywall near door" class="w-full border border-gray-300 rounded-lg p-3" value="${alert.note || ''}" oninput="updateConditionNote(this.value)">
+                            <div class="text-xs text-gray-400 mt-1 text-right">${(alert.note || '').length}/100</div>
+                        </div>` : ''}
+                        <div class="bg-alpha-50 border border-alpha-200 rounded-lg p-3">
+                            <div class="text-sm text-alpha-700">B&G alerts are separate from cleanliness and do NOT affect your score.</div>
                         </div>
                     </div>
-                    
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
                         <button onclick="finishZone()" class="w-full py-4 rounded-xl text-lg font-bold ${canCompleteCondition(zoneId) ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-500'}" ${canCompleteCondition(zoneId) ? '' : 'disabled'}>
-                            ${state.currentZoneIndex < allZones.length - 1 ? 'Next Zone →' : 'Finish Walkthrough →'}
+                            ${state.currentZoneIndex < allZones.length - 1 ? 'Next Zone →' : 'Finish Zones →'}
                         </button>
                     </div>
                 </div>
@@ -982,23 +930,20 @@
         function renderTourReady() {
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
-                    <div class="bg-blue-800 text-white p-4">
+                    <div class="alpha-gradient text-white p-4">
                         <div class="flex items-center">
                             <button onclick="goToAuditOverview()" class="text-2xl mr-3">←</button>
                             <h1 class="text-xl font-bold">Final Question</h1>
                         </div>
                     </div>
-                    
                     <div class="p-4">
                         <div class="bg-white rounded-lg p-6 shadow">
-                            <div class="text-lg font-medium mb-4">Based on your entire walkthrough, could a parent tour happen right now?</div>
-                            
+                            <div class="text-lg font-medium mb-4">Could a parent tour happen right now?</div>
                             <div class="space-y-3">
                                 <button onclick="setTourReady('yes')" class="w-full p-4 rounded-lg border-2 ${state.tourReady === 'yes' ? 'border-green-500 bg-green-50' : 'border-gray-200'} flex items-center">
                                     <span class="text-2xl mr-3">✓</span>
                                     <div class="font-medium">Yes — Tour Ready</div>
                                 </button>
-                                
                                 <button onclick="setTourReady('no')" class="w-full p-4 rounded-lg border-2 ${state.tourReady === 'no' ? 'border-red-500 bg-red-50' : 'border-gray-200'} flex items-center">
                                     <span class="text-2xl mr-3">✗</span>
                                     <div>
@@ -1009,11 +954,8 @@
                             </div>
                         </div>
                     </div>
-                    
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
-                        <button onclick="goToSummary()" class="w-full py-4 rounded-xl text-lg font-bold ${state.tourReady !== null ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}" ${state.tourReady !== null ? '' : 'disabled'}>
-                            Review Summary →
-                        </button>
+                        <button onclick="goToSummary()" class="w-full py-4 rounded-xl text-lg font-bold ${state.tourReady !== null ? 'bg-alpha-500 text-white' : 'bg-gray-300 text-gray-500'}" ${state.tourReady !== null ? '' : 'disabled'}>Review Summary →</button>
                     </div>
                 </div>
             `;
@@ -1024,58 +966,36 @@
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
             const totalDefects = getTotalDefects();
             const duration = Math.round((Date.now() - state.startTime) / 60000);
-            
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
                     <div class="${status === 'GREEN' ? 'bg-green-500' : status === 'AMBER' ? 'bg-yellow-500' : 'bg-red-500'} text-white p-6 text-center">
                         <div class="text-5xl mb-2">${status === 'GREEN' ? '✓' : status === 'AMBER' ? '⚠️' : '✗'}</div>
                         <div class="text-3xl font-bold">${status}</div>
-                        <div class="opacity-90">${state.campus}</div>
+                        <div class="opacity-90">${state.campus?.name || ''}</div>
                     </div>
-                    
                     <div class="p-4 space-y-4">
                         <div class="grid grid-cols-3 gap-3">
-                            <div class="bg-white p-3 rounded-lg shadow text-center">
-                                <div class="text-xl font-bold">${allZones.length}</div>
-                                <div class="text-xs text-gray-500">Zones</div>
-                            </div>
-                            <div class="bg-white p-3 rounded-lg shadow text-center">
-                                <div class="text-xl font-bold ${totalDefects > 0 ? 'text-red-500' : 'text-green-500'}">${totalDefects}</div>
-                                <div class="text-xs text-gray-500">Defects</div>
-                            </div>
-                            <div class="bg-white p-3 rounded-lg shadow text-center">
-                                <div class="text-xl font-bold">${duration}m</div>
-                                <div class="text-xs text-gray-500">Duration</div>
-                            </div>
+                            <div class="bg-white p-3 rounded-lg shadow text-center"><div class="text-xl font-bold">${allZones.length}</div><div class="text-xs text-gray-500">Zones</div></div>
+                            <div class="bg-white p-3 rounded-lg shadow text-center"><div class="text-xl font-bold ${totalDefects > 0 ? 'text-red-500' : 'text-green-500'}">${totalDefects}</div><div class="text-xs text-gray-500">Defects</div></div>
+                            <div class="bg-white p-3 rounded-lg shadow text-center"><div class="text-xl font-bold">${duration}m</div><div class="text-xs text-gray-500">Duration</div></div>
                         </div>
-                        
                         <div class="bg-white rounded-lg shadow divide-y">
                             ${allZones.map(zoneId => {
                                 const zone = ZONES[zoneId];
                                 const defects = countDefects(zoneId);
-                                return `
-                                    <div class="p-3 flex items-center">
-                                        <span class="w-7 h-7 rounded-full ${defects === 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} flex items-center justify-center mr-3 font-bold text-sm">
-                                            ${defects === 0 ? '✓' : defects}
-                                        </span>
-                                        <span class="flex-1 text-sm">${zone.name}</span>
-                                    </div>
-                                `;
+                                return `<div class="p-3 flex items-center">
+                                    <span class="w-7 h-7 rounded-full ${defects === 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} flex items-center justify-center mr-3 font-bold text-sm">${defects === 0 ? '✓' : defects}</span>
+                                    <span class="flex-1 text-sm">${zone.name}</span>
+                                </div>`;
                             }).join('')}
                         </div>
-                        
-                        ${state.conditionAlerts.filter(a => a.hasIssue).length > 0 ? `
-                            <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                                <div class="font-bold text-orange-800 mb-1">⚠️ ${state.conditionAlerts.filter(a => a.hasIssue).length} Condition Alert(s)</div>
-                                <div class="text-sm text-orange-700">Will be routed to B&G</div>
-                            </div>
-                        ` : ''}
+                        ${state.conditionAlerts.filter(a => a.hasIssue).length > 0 ? `<div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                            <div class="font-bold text-orange-800 mb-1">🔧 ${state.conditionAlerts.filter(a => a.hasIssue).length} B&G Issue(s) Flagged</div>
+                            <div class="text-sm text-orange-700">Will be sent to B&G team</div>
+                        </div>` : ''}
                     </div>
-                    
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
-                        <button onclick="submitAudit()" class="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold">
-                            ✓ Submit Audit
-                        </button>
+                        <button onclick="submitAudit()" class="w-full bg-alpha-500 text-white py-4 rounded-xl text-lg font-bold">✓ Submit Audit</button>
                     </div>
                 </div>
             `;
@@ -1086,9 +1006,9 @@
             return `
                 <div class="min-h-screen ${status === 'GREEN' ? 'bg-green-500' : status === 'AMBER' ? 'bg-yellow-500' : 'bg-red-500'} flex flex-col items-center justify-center p-8 text-white text-center">
                     <div class="text-8xl mb-6">✅</div>
-                    <h1 class="text-3xl font-bold mb-2">Audit Submitted!</h1>
+                    <h1 class="text-3xl font-bold mb-2">Submitted!</h1>
                     <div class="text-5xl font-bold my-4">${status}</div>
-                    <p class="opacity-90 mb-8">${state.campus}</p>
+                    <p class="opacity-90 mb-8">${state.campus?.name || ''}</p>
                     <button onclick="goHome()" class="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold">Done</button>
                 </div>
             `;
@@ -1098,38 +1018,27 @@
             const audits = getAudits().reverse();
             return `
                 <div class="min-h-screen bg-gray-100">
-                    <div class="bg-blue-800 text-white p-4">
+                    <div class="alpha-gradient text-white p-4">
                         <div class="flex items-center">
                             <button onclick="goHome()" class="text-2xl mr-3">←</button>
                             <h1 class="text-xl font-bold">Audit History</h1>
                         </div>
                     </div>
-                    
                     <div class="p-4">
-                        ${audits.length === 0 ? `
-                            <div class="text-center py-12 text-gray-400">
-                                <div class="text-5xl mb-4">📋</div>
-                                <p>No audits yet</p>
+                        ${audits.length === 0 ? `<div class="text-center py-12 text-gray-400"><div class="text-5xl mb-4">📋</div><p>No audits yet</p></div>` : 
+                        `<div class="space-y-3">${audits.map(a => `<div class="bg-white rounded-lg p-4 shadow">
+                            <div class="flex items-center">
+                                <span class="text-2xl mr-3">${a.status === 'GREEN' ? '🟢' : a.status === 'AMBER' ? '🟡' : '🔴'}</span>
+                                <div class="flex-1">
+                                    <div class="font-bold">${a.campus}</div>
+                                    <div class="text-sm text-gray-500">${a.date} • ${a.auditor}</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-bold ${a.status === 'GREEN' ? 'text-green-600' : a.status === 'AMBER' ? 'text-yellow-600' : 'text-red-600'}">${a.status}</div>
+                                    <div class="text-sm text-gray-500">${a.defects} defect${a.defects !== 1 ? 's' : ''}</div>
+                                </div>
                             </div>
-                        ` : `
-                            <div class="space-y-3">
-                                ${audits.map(a => `
-                                    <div class="bg-white rounded-lg p-4 shadow">
-                                        <div class="flex items-center">
-                                            <span class="text-2xl mr-3">${a.status === 'GREEN' ? '🟢' : a.status === 'AMBER' ? '🟡' : '🔴'}</span>
-                                            <div class="flex-1">
-                                                <div class="font-bold">${a.campus}</div>
-                                                <div class="text-sm text-gray-500">${a.date} • ${a.auditor}</div>
-                                            </div>
-                                            <div class="text-right">
-                                                <div class="font-bold ${a.status === 'GREEN' ? 'text-green-600' : a.status === 'AMBER' ? 'text-yellow-600' : 'text-red-600'}">${a.status}</div>
-                                                <div class="text-sm text-gray-500">${a.defects} defect${a.defects !== 1 ? 's' : ''}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `}
+                        </div>`).join('')}</div>`}
                     </div>
                 </div>
             `;
@@ -1138,30 +1047,20 @@
         // ============================================
         // EVENT HANDLERS
         // ============================================
-        function attachEventListeners() {}
-
         function goHome() {
-            state = {
-                screen: 'home',
-                campus: '', auditorName: '', startTime: null,
-                selectedOptionalZones: [], currentZoneIndex: 0,
-                zoneResults: {}, conditionAlerts: [], tourReady: null,
-                reportCampus: '', reportPhoto: null, reportCategory: null,
-                reportLocation: '', reportNote: '', reportUrgent: false
-            };
+            state = { screen: 'home', campus: null, auditorName: '', startTime: null, selectedOptionalZones: [], currentZoneIndex: 0, zoneResults: {}, conditionAlerts: [], tourReady: null, reportCampus: null, reportPhoto: null, reportCategory: null, reportLocation: '', reportNote: '', reportUrgent: false };
             render();
         }
-
         function goToHistory() { state.screen = 'history'; render(); }
         function goToReportsList() { state.screen = 'reports_list'; render(); }
         function startAudit() { state.screen = 'setup'; render(); }
         function startReport() { state.screen = 'report_start'; render(); }
 
         function beginAudit() {
-            const campus = document.getElementById('campus').value;
+            const campusName = document.getElementById('campus').value;
             const auditorName = document.getElementById('auditorName').value;
-            if (!campus || !auditorName) { alert('Please select campus and enter name'); return; }
-            state.campus = campus;
+            if (!campusName || !auditorName) { alert('Please select campus and enter name'); return; }
+            state.campus = CAMPUSES.find(c => c.name === campusName);
             state.auditorName = auditorName;
             state.selectedOptionalZones = Array.from(document.querySelectorAll('.optional-zone:checked')).map(el => el.value);
             state.startTime = Date.now();
@@ -1170,151 +1069,99 @@
         }
 
         function goToAuditOverview() { state.screen = 'audit'; render(); }
-
         function goToNextIncomplete() {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
             for (let i = 0; i < allZones.length; i++) {
-                if (!state.zoneResults[allZones[i]]) {
-                    state.currentZoneIndex = i;
-                    state.screen = 'zone';
-                    render();
-                    return;
-                }
+                if (!state.zoneResults[allZones[i]]) { state.currentZoneIndex = i; state.screen = 'zone'; render(); return; }
             }
         }
-
         function goToZone(index) { state.currentZoneIndex = index; state.screen = 'zone'; render(); }
-
         function setResponse(zoneId, questionIndex, value) {
             if (!state.zoneResults[zoneId]) state.zoneResults[zoneId] = {};
             state.zoneResults[zoneId][questionIndex] = value;
             render();
         }
-
         function isZoneComplete(zoneId) {
             const zone = ZONES[zoneId];
             const results = state.zoneResults[zoneId] || {};
             return Object.keys(results).length === zone.cleanliness.length;
         }
-
-        function completeZone(zoneId) {
-            if (isZoneComplete(zoneId)) { state.screen = 'condition'; render(); }
-        }
-
+        function completeZone(zoneId) { if (isZoneComplete(zoneId)) { state.screen = 'condition'; render(); } }
         function setConditionAlert(zoneId, hasIssue) {
             const idx = state.conditionAlerts.findIndex(a => a.zoneId === zoneId);
             if (idx >= 0) {
                 if (hasIssue) state.conditionAlerts[idx].hasIssue = true;
                 else state.conditionAlerts.splice(idx, 1);
-            } else if (hasIssue) {
-                state.conditionAlerts.push({ zoneId, hasIssue: true, note: '', photo: null });
             } else {
-                state.conditionAlerts.push({ zoneId, hasIssue: false, note: '', photo: null });
+                state.conditionAlerts.push({ zoneId, hasIssue, note: '', photo: null });
             }
             render();
         }
-
         function takeConditionPhoto(zoneId) {
             openCamera((imageData) => {
                 const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
                 if (alert) alert.photo = imageData;
                 render();
-            }, 'Condition Issue Photo');
+            }, 'B&G Issue');
         }
-
         function updateConditionNote(note) {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
             const zoneId = allZones[state.currentZoneIndex];
             const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
             if (alert) alert.note = note;
         }
-
         function canCompleteCondition(zoneId) {
             const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
             if (!alert || alert.hasIssue === false) return true;
             return alert.hasIssue && alert.photo && alert.note && alert.note.length > 0;
         }
-
         function finishZone() {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
-            if (state.currentZoneIndex < allZones.length - 1) {
-                state.currentZoneIndex++;
-                state.screen = 'zone';
-            } else {
-                state.screen = 'audit';
-            }
+            if (state.currentZoneIndex < allZones.length - 1) { state.currentZoneIndex++; state.screen = 'zone'; }
+            else { state.screen = 'audit'; }
             render();
         }
-
         function goToTourReady() { state.screen = 'tourready'; render(); }
         function setTourReady(value) { state.tourReady = value; render(); }
         function goToSummary() { state.screen = 'summary'; render(); }
         function confirmExit() { if (confirm('Exit? Progress will be lost.')) goHome(); }
-
         function submitAudit() {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
             saveAudit({
-                id: Date.now(),
-                date: new Date().toLocaleDateString(),
-                time: new Date().toLocaleTimeString(),
-                campus: state.campus,
-                auditor: state.auditorName,
-                status: calculateStatus(),
-                defects: getTotalDefects(),
-                zones: allZones.length,
-                duration: Math.round((Date.now() - state.startTime) / 60000),
-                tourReady: state.tourReady === 'yes',
-                conditionAlerts: state.conditionAlerts.filter(a => a.hasIssue).length,
-                zoneResults: state.zoneResults,
-                conditionAlertDetails: state.conditionAlerts.filter(a => a.hasIssue)
+                id: Date.now(), date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString(),
+                campus: state.campus?.name || '', auditor: state.auditorName, status: calculateStatus(),
+                defects: getTotalDefects(), zones: allZones.length, duration: Math.round((Date.now() - state.startTime) / 60000),
+                tourReady: state.tourReady === 'yes', conditionAlerts: state.conditionAlerts.filter(a => a.hasIssue).length,
+                zoneResults: state.zoneResults, conditionAlertDetails: state.conditionAlerts.filter(a => a.hasIssue),
+                campusData: state.campus
             });
             state.screen = 'complete';
             render();
         }
 
-        // See It Report It handlers
+        // See It Report It
         function openReportCamera() {
-            const campus = document.getElementById('reportCampus')?.value;
-            if (!campus) { alert('Please select a campus first'); return; }
-            state.reportCampus = campus;
-            openCamera((imageData) => {
-                state.reportPhoto = imageData;
-                state.screen = 'report_photo';
-                render();
-            }, 'Capture Issue');
+            const campusName = document.getElementById('reportCampus')?.value;
+            if (!campusName) { alert('Please select a campus first'); return; }
+            state.reportCampus = CAMPUSES.find(c => c.name === campusName);
+            openCamera((imageData) => { state.reportPhoto = imageData; state.screen = 'report_photo'; render(); }, 'Capture Issue');
         }
-
-        function retakePhoto() {
-            openCamera((imageData) => {
-                state.reportPhoto = imageData;
-                render();
-            }, 'Capture Issue');
-        }
-
+        function retakePhoto() { openCamera((imageData) => { state.reportPhoto = imageData; render(); }, 'Capture Issue'); }
         function setReportCategory(catId) { state.reportCategory = catId; render(); }
         function toggleUrgent() { state.reportUrgent = !state.reportUrgent; render(); }
-
         function canSubmitReport() {
             const location = document.getElementById('reportLocation')?.value || state.reportLocation;
             return state.reportPhoto && state.reportCategory && location;
         }
-
         function submitReport() {
             state.reportLocation = document.getElementById('reportLocation')?.value || '';
             state.reportNote = document.getElementById('reportNote')?.value || '';
-            
             const cat = ISSUE_CATEGORIES.find(c => c.id === state.reportCategory);
             saveReport({
-                id: Date.now(),
-                timestamp: new Date().toLocaleString(),
-                campus: state.reportCampus,
-                photo: state.reportPhoto,
-                category: state.reportCategory,
-                location: state.reportLocation,
-                note: state.reportNote,
-                urgent: state.reportUrgent,
-                team: cat?.team || 'Facilities',
-                status: 'open'
+                id: Date.now(), timestamp: new Date().toLocaleString(), campus: state.reportCampus?.name || '',
+                photo: state.reportPhoto, category: state.reportCategory, location: state.reportLocation,
+                note: state.reportNote, urgent: state.reportUrgent, team: cat?.team || 'Facilities', status: 'open',
+                campusData: state.reportCampus
             });
             state.screen = 'report_complete';
             render();
