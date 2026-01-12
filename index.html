@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#1e40af">
-    <title>Alpha Facilities QC</title>
+    <title>Alpha Facilities</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         * { -webkit-tap-highlight-color: transparent; }
@@ -23,6 +23,63 @@
 
     <script>
         // ============================================
+        // CAMERA FUNCTIONS (Global)
+        // ============================================
+        let cameraStream = null;
+        let cameraCallback = null;
+
+        async function openCamera(callback, label = 'Take Photo') {
+            cameraCallback = callback;
+            const modal = document.getElementById('cameraModal');
+            const video = document.getElementById('cameraFeed');
+            const labelEl = document.getElementById('cameraLabel');
+            
+            if (labelEl) labelEl.textContent = '📷 ' + label;
+            
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    audio: false
+                });
+                video.srcObject = cameraStream;
+                modal.classList.remove('hidden');
+            } catch (err) {
+                alert('Unable to access camera. Please grant permission and try again.');
+                console.error('Camera error:', err);
+            }
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('cameraFeed');
+            const canvas = document.getElementById('cameraCanvas');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const imageData = canvas.toDataURL('image/jpeg', 0.7);
+            closeCamera();
+            
+            if (cameraCallback) {
+                cameraCallback(imageData);
+                cameraCallback = null;
+            }
+        }
+
+        function closeCamera() {
+            const modal = document.getElementById('cameraModal');
+            const video = document.getElementById('cameraFeed');
+            
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            video.srcObject = null;
+            modal.classList.add('hidden');
+            cameraCallback = null;
+        }
+
+        // ============================================
         // CONFIGURATION
         // ============================================
         const CAMPUSES = [
@@ -34,9 +91,22 @@
             "Alpha Denver"
         ];
 
-        // Zone definitions with questions
+        const ISSUE_CATEGORIES = [
+            { id: 'cleaning', name: 'Cleaning Issue', icon: '🧹', team: 'Housekeeping' },
+            { id: 'supplies', name: 'Supplies Empty', icon: '🧻', team: 'Housekeeping' },
+            { id: 'spill', name: 'Spill / Wet Floor', icon: '💧', team: 'Housekeeping' },
+            { id: 'trash', name: 'Trash Overflow', icon: '🗑️', team: 'Housekeeping' },
+            { id: 'odor', name: 'Odor Issue', icon: '👃', team: 'Housekeeping' },
+            { id: 'plumbing', name: 'Plumbing', icon: '🚿', team: 'B&G' },
+            { id: 'electrical', name: 'Electrical', icon: '⚡', team: 'B&G' },
+            { id: 'hvac', name: 'HVAC / Temperature', icon: '❄️', team: 'B&G' },
+            { id: 'damage', name: 'Building Damage', icon: '🔨', team: 'B&G' },
+            { id: 'safety', name: 'Safety Hazard', icon: '⚠️', team: 'Facilities Manager' },
+            { id: 'pest', name: 'Pest Issue', icon: '🐛', team: 'Vendor' },
+            { id: 'other', name: 'Other', icon: '❓', team: 'Facilities Manager' }
+        ];
+
         const ZONES = {
-            // MANDATORY ZONES (5)
             entry: {
                 name: "Entry & Lobby",
                 type: "mandatory",
@@ -71,7 +141,7 @@
             restroom_primary: {
                 name: "Restroom (Lobby / Primary)",
                 type: "mandatory",
-                amberEligible: false, // Any defect = RED
+                amberEligible: false,
                 description: "Amber-Ineligible zone — any defect = Red",
                 cleanliness: [
                     "Toilets/urinals sanitary (no visible soil, stains, residue)?",
@@ -114,10 +184,8 @@
                     "Cleaning supplies present and stocked?",
                     "Closet organized (not cluttered/hazardous)?"
                 ],
-                supplyItems: [0, 1, 2, 3] // Indices that trigger Cintas order if No
+                supplyItems: [0, 1, 2, 3]
             },
-
-            // OPTIONAL ZONES
             restroom_additional: {
                 name: "Restroom (Additional)",
                 type: "optional",
@@ -201,7 +269,8 @@
         // APP STATE
         // ============================================
         let state = {
-            screen: 'home', // home, setup, audit, zone, condition, summary, complete
+            screen: 'home',
+            // QC Audit state
             campus: '',
             auditorName: '',
             startTime: null,
@@ -209,7 +278,14 @@
             currentZoneIndex: 0,
             zoneResults: {},
             conditionAlerts: [],
-            tourReady: null
+            tourReady: null,
+            // See It Report It state
+            reportCampus: '',
+            reportPhoto: null,
+            reportCategory: null,
+            reportLocation: '',
+            reportNote: '',
+            reportUrgent: false
         };
 
         // ============================================
@@ -225,6 +301,16 @@
             return JSON.parse(localStorage.getItem('alpha_audits') || '[]');
         }
 
+        function saveReport(report) {
+            const reports = JSON.parse(localStorage.getItem('alpha_reports') || '[]');
+            reports.push(report);
+            localStorage.setItem('alpha_reports', JSON.stringify(reports));
+        }
+
+        function getReports() {
+            return JSON.parse(localStorage.getItem('alpha_reports') || '[]');
+        }
+
         // ============================================
         // STATUS CALCULATION
         // ============================================
@@ -237,35 +323,16 @@
                 const zone = ZONES[zoneId];
                 const results = state.zoneResults[zoneId] || {};
                 const defects = Object.values(results).filter(v => v === 'no').length;
-                
                 totalDefects += defects;
-                
                 if (!zone.amberEligible && defects > 0) {
                     hasAmberIneligibleDefect = true;
                 }
             }
 
-            // Tour Ready = No means automatic RED
-            if (state.tourReady === 'no') {
-                return 'RED';
-            }
-
-            // Any defect in amber-ineligible zone = RED
-            if (hasAmberIneligibleDefect) {
-                return 'RED';
-            }
-
-            // 0 defects = GREEN
-            if (totalDefects === 0) {
-                return 'GREEN';
-            }
-
-            // 1 defect in amber-eligible zone = AMBER
-            if (totalDefects === 1) {
-                return 'AMBER';
-            }
-
-            // 2+ defects = RED
+            if (state.tourReady === 'no') return 'RED';
+            if (hasAmberIneligibleDefect) return 'RED';
+            if (totalDefects === 0) return 'GREEN';
+            if (totalDefects === 1) return 'AMBER';
             return 'RED';
         }
 
@@ -280,39 +347,26 @@
         }
 
         // ============================================
-        // RENDER FUNCTIONS
+        // RENDER
         // ============================================
         function render() {
             const app = document.getElementById('app');
             
             switch(state.screen) {
-                case 'home':
-                    app.innerHTML = renderHome();
-                    break;
-                case 'setup':
-                    app.innerHTML = renderSetup();
-                    break;
-                case 'audit':
-                    app.innerHTML = renderAuditOverview();
-                    break;
-                case 'zone':
-                    app.innerHTML = renderZone();
-                    break;
-                case 'condition':
-                    app.innerHTML = renderConditionAlert();
-                    break;
-                case 'tourready':
-                    app.innerHTML = renderTourReady();
-                    break;
-                case 'summary':
-                    app.innerHTML = renderSummary();
-                    break;
-                case 'complete':
-                    app.innerHTML = renderComplete();
-                    break;
-                case 'history':
-                    app.innerHTML = renderHistory();
-                    break;
+                case 'home': app.innerHTML = renderHome(); break;
+                case 'setup': app.innerHTML = renderSetup(); break;
+                case 'audit': app.innerHTML = renderAuditOverview(); break;
+                case 'zone': app.innerHTML = renderZone(); break;
+                case 'condition': app.innerHTML = renderConditionAlert(); break;
+                case 'tourready': app.innerHTML = renderTourReady(); break;
+                case 'summary': app.innerHTML = renderSummary(); break;
+                case 'complete': app.innerHTML = renderComplete(); break;
+                case 'history': app.innerHTML = renderHistory(); break;
+                case 'report_start': app.innerHTML = renderReportStart(); break;
+                case 'report_photo': app.innerHTML = renderReportPhoto(); break;
+                case 'report_details': app.innerHTML = renderReportDetails(); break;
+                case 'report_complete': app.innerHTML = renderReportComplete(); break;
+                case 'reports_list': app.innerHTML = renderReportsList(); break;
             }
             
             attachEventListeners();
@@ -320,54 +374,342 @@
 
         function renderHome() {
             const audits = getAudits();
-            const recentAudits = audits.slice(-5).reverse();
+            const reports = getReports();
+            const openReports = reports.filter(r => r.status === 'open').length;
             
             return `
                 <div class="min-h-screen bg-gradient-to-b from-blue-800 to-blue-900 text-white">
                     <div class="p-6 pt-12">
-                        <h1 class="text-3xl font-bold mb-2">Alpha Facilities</h1>
-                        <p class="text-blue-200">Daily QC Walkthrough</p>
+                        <h1 class="text-3xl font-bold mb-1">Alpha Facilities</h1>
+                        <p class="text-blue-200">Cleanliness & Issue Management</p>
                     </div>
                     
                     <div class="p-6 space-y-4">
-                        <button onclick="startAudit()" class="w-full bg-white text-blue-800 py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center">
-                            <span class="text-2xl mr-3">✅</span>
-                            Start Daily QC
+                        <!-- See It Report It -->
+                        <button onclick="startReport()" class="w-full bg-red-500 text-white py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center">
+                            <span class="text-2xl mr-3">📸</span>
+                            See It, Report It
                         </button>
                         
-                        <button onclick="goToHistory()" class="w-full bg-blue-700 text-white py-3 rounded-xl text-lg font-medium">
-                            📊 View History (${audits.length})
+                        <!-- Daily QC -->
+                        <button onclick="startAudit()" class="w-full bg-white text-blue-800 py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center">
+                            <span class="text-2xl mr-3">✅</span>
+                            Daily QC Walkthrough
                         </button>
+                        
+                        <!-- Quick Stats -->
+                        <div class="grid grid-cols-2 gap-3 mt-6">
+                            <button onclick="goToHistory()" class="bg-blue-700/50 p-4 rounded-xl text-left">
+                                <div class="text-3xl font-bold">${audits.length}</div>
+                                <div class="text-blue-200 text-sm">QC Audits</div>
+                            </button>
+                            <button onclick="goToReportsList()" class="bg-blue-700/50 p-4 rounded-xl text-left">
+                                <div class="text-3xl font-bold">${reports.length}</div>
+                                <div class="text-blue-200 text-sm">Issues Reported</div>
+                                ${openReports > 0 ? `<div class="text-yellow-300 text-xs mt-1">${openReports} open</div>` : ''}
+                            </button>
+                        </div>
                     </div>
                     
-                    ${recentAudits.length > 0 ? `
-                        <div class="bg-white text-gray-800 rounded-t-3xl mt-6 p-6 min-h-[300px]">
-                            <h2 class="font-bold text-lg mb-4">Recent Audits</h2>
-                            <div class="space-y-3">
-                                ${recentAudits.map(a => `
-                                    <div class="flex items-center p-3 bg-gray-50 rounded-lg">
-                                        <span class="text-2xl mr-3">${a.status === 'GREEN' ? '🟢' : a.status === 'AMBER' ? '🟡' : '🔴'}</span>
-                                        <div class="flex-1">
-                                            <div class="font-medium">${a.campus}</div>
-                                            <div class="text-sm text-gray-500">${a.date} • ${a.defects} defect${a.defects !== 1 ? 's' : ''}</div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="bg-white text-gray-800 rounded-t-3xl mt-6 p-6 min-h-[300px]">
-                            <div class="text-center py-12 text-gray-400">
-                                <div class="text-5xl mb-4">📋</div>
-                                <p>No audits yet</p>
-                                <p class="text-sm">Start your first Daily QC above</p>
-                            </div>
-                        </div>
-                    `}
+                    <!-- Recent Activity -->
+                    <div class="bg-white text-gray-800 rounded-t-3xl mt-4 p-6 min-h-[250px]">
+                        <h2 class="font-bold text-lg mb-4">Recent Activity</h2>
+                        ${renderRecentActivity(audits, reports)}
+                    </div>
                 </div>
             `;
         }
 
+        function renderRecentActivity(audits, reports) {
+            const combined = [
+                ...audits.map(a => ({ ...a, type: 'audit', sortDate: new Date(a.date + ' ' + a.time) })),
+                ...reports.map(r => ({ ...r, type: 'report', sortDate: new Date(r.timestamp) }))
+            ].sort((a, b) => b.sortDate - a.sortDate).slice(0, 5);
+
+            if (combined.length === 0) {
+                return `
+                    <div class="text-center py-8 text-gray-400">
+                        <div class="text-4xl mb-2">📋</div>
+                        <p>No activity yet</p>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="space-y-3">
+                    ${combined.map(item => {
+                        if (item.type === 'audit') {
+                            return `
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="text-2xl mr-3">${item.status === 'GREEN' ? '🟢' : item.status === 'AMBER' ? '🟡' : '🔴'}</span>
+                                    <div class="flex-1">
+                                        <div class="font-medium">QC: ${item.campus}</div>
+                                        <div class="text-sm text-gray-500">${item.date} • ${item.defects} defect${item.defects !== 1 ? 's' : ''}</div>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            const cat = ISSUE_CATEGORIES.find(c => c.id === item.category) || { icon: '❓', name: 'Issue' };
+                            return `
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="text-2xl mr-3">${cat.icon}</span>
+                                    <div class="flex-1">
+                                        <div class="font-medium">${cat.name}</div>
+                                        <div class="text-sm text-gray-500">${item.campus} • ${item.location || 'No location'}</div>
+                                    </div>
+                                    <span class="text-xs px-2 py-1 rounded ${item.status === 'open' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${item.status}</span>
+                                </div>
+                            `;
+                        }
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        // ============================================
+        // SEE IT REPORT IT SCREENS
+        // ============================================
+        function renderReportStart() {
+            return `
+                <div class="min-h-screen bg-gray-100">
+                    <div class="bg-red-500 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="goHome()" class="text-2xl mr-3">←</button>
+                            <div>
+                                <h1 class="text-xl font-bold">See It, Report It</h1>
+                                <p class="text-red-100 text-sm">Report a facility issue</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 space-y-4">
+                        <div class="bg-white rounded-lg p-6 shadow text-center">
+                            <div class="text-6xl mb-4">📸</div>
+                            <h2 class="text-xl font-bold mb-2">Snap a Photo</h2>
+                            <p class="text-gray-600 mb-6">Take a photo of the issue. It will be automatically analyzed and routed to the right team.</p>
+                            
+                            <div class="space-y-3 mb-6">
+                                <label class="block text-left text-sm font-medium text-gray-700">Campus *</label>
+                                <select id="reportCampus" class="w-full border border-gray-300 rounded-lg p-3 text-lg bg-white">
+                                    <option value="">Select campus...</option>
+                                    ${CAMPUSES.map(c => `<option value="${c}">${c}</option>`).join('')}
+                                </select>
+                            </div>
+                            
+                            <button onclick="openReportCamera()" class="w-full bg-red-500 text-white py-4 rounded-xl text-lg font-bold">
+                                📷 Open Camera
+                            </button>
+                        </div>
+                        
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div class="text-sm text-blue-800">
+                                <strong>How it works:</strong><br>
+                                1. Take a photo of the issue<br>
+                                2. Select category and add details<br>
+                                3. Submit — right team gets notified
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderReportPhoto() {
+            return `
+                <div class="min-h-screen bg-gray-100">
+                    <div class="bg-red-500 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="state.screen='report_start'; render();" class="text-2xl mr-3">←</button>
+                            <div>
+                                <h1 class="text-xl font-bold">Review Photo</h1>
+                                <p class="text-red-100 text-sm">${state.reportCampus}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 space-y-4">
+                        ${state.reportPhoto ? `
+                            <div class="rounded-lg overflow-hidden shadow">
+                                <img src="${state.reportPhoto}" alt="Issue photo" class="w-full">
+                            </div>
+                            
+                            <div class="flex gap-3">
+                                <button onclick="retakePhoto()" class="flex-1 bg-gray-200 py-3 rounded-lg font-medium">
+                                    🔄 Retake
+                                </button>
+                                <button onclick="state.screen='report_details'; render();" class="flex-1 bg-red-500 text-white py-3 rounded-lg font-medium">
+                                    Continue →
+                                </button>
+                            </div>
+                        ` : `
+                            <div class="bg-white rounded-lg p-12 text-center text-gray-400">
+                                <div class="text-6xl mb-4">📷</div>
+                                <p>No photo captured</p>
+                                <button onclick="openReportCamera()" class="mt-4 bg-red-500 text-white px-6 py-2 rounded-lg">
+                                    Open Camera
+                                </button>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderReportDetails() {
+            return `
+                <div class="min-h-screen bg-gray-100 pb-24">
+                    <div class="bg-red-500 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="state.screen='report_photo'; render();" class="text-2xl mr-3">←</button>
+                            <div>
+                                <h1 class="text-xl font-bold">Issue Details</h1>
+                                <p class="text-red-100 text-sm">${state.reportCampus}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 space-y-4">
+                        <!-- Photo thumbnail -->
+                        ${state.reportPhoto ? `
+                            <div class="flex items-center bg-white rounded-lg p-3 shadow">
+                                <img src="${state.reportPhoto}" alt="Issue" class="w-16 h-16 object-cover rounded mr-3">
+                                <div class="text-sm text-gray-600">Photo captured ✓</div>
+                            </div>
+                        ` : ''}
+                        
+                        <!-- Category Selection -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">What type of issue? *</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                ${ISSUE_CATEGORIES.map(cat => `
+                                    <button onclick="setReportCategory('${cat.id}')" class="p-3 rounded-lg border-2 text-center ${state.reportCategory === cat.id ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-white'}">
+                                        <div class="text-2xl mb-1">${cat.icon}</div>
+                                        <div class="text-xs">${cat.name}</div>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <!-- Location -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Location *</label>
+                            <input type="text" id="reportLocation" value="${state.reportLocation}" placeholder="e.g., 2nd floor restroom, Room 204, Main hallway" class="w-full border border-gray-300 rounded-lg p-3">
+                        </div>
+                        
+                        <!-- Notes -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Additional Notes (optional)</label>
+                            <textarea id="reportNote" placeholder="Any additional details..." class="w-full border border-gray-300 rounded-lg p-3" rows="2">${state.reportNote}</textarea>
+                        </div>
+                        
+                        <!-- Urgent toggle -->
+                        <div class="bg-white rounded-lg p-4 shadow">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" id="reportUrgent" ${state.reportUrgent ? 'checked' : ''} class="sr-only">
+                                <div class="w-12 h-6 rounded-full mr-3 ${state.reportUrgent ? 'bg-red-500' : 'bg-gray-300'}" onclick="toggleUrgent()">
+                                    <div class="w-5 h-5 bg-white rounded-full shadow transform transition-transform ${state.reportUrgent ? 'translate-x-6' : 'translate-x-1'}" style="margin-top: 2px;"></div>
+                                </div>
+                                <div>
+                                    <div class="font-medium">🚨 Urgent / Safety Hazard</div>
+                                    <div class="text-sm text-gray-500">Requires immediate attention</div>
+                                </div>
+                            </label>
+                        </div>
+                        
+                        ${state.reportCategory ? `
+                            <div class="bg-gray-50 rounded-lg p-3">
+                                <div class="text-sm text-gray-600">
+                                    <strong>Routes to:</strong> ${ISSUE_CATEGORIES.find(c => c.id === state.reportCategory)?.team || 'Facilities'}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+                        <button onclick="submitReport()" class="w-full py-4 rounded-xl text-lg font-bold ${canSubmitReport() ? 'bg-red-500 text-white' : 'bg-gray-300 text-gray-500'}" ${canSubmitReport() ? '' : 'disabled'}>
+                            ${state.reportUrgent ? '🚨 Submit Urgent Report' : '✓ Submit Report'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderReportComplete() {
+            const cat = ISSUE_CATEGORIES.find(c => c.id === state.reportCategory);
+            return `
+                <div class="min-h-screen bg-green-500 flex flex-col items-center justify-center p-8 text-white text-center">
+                    <div class="text-8xl mb-6">✅</div>
+                    <h1 class="text-3xl font-bold mb-2">Report Submitted!</h1>
+                    <p class="text-lg opacity-90 mb-4">${cat?.team || 'Facilities'} has been notified</p>
+                    
+                    <div class="bg-white/20 rounded-lg p-4 mb-8 w-full max-w-sm text-left">
+                        <div class="flex items-center mb-2">
+                            <span class="text-2xl mr-2">${cat?.icon || '📋'}</span>
+                            <span class="font-bold">${cat?.name || 'Issue'}</span>
+                        </div>
+                        <div class="text-sm opacity-90">${state.reportCampus}</div>
+                        <div class="text-sm opacity-90">${state.reportLocation}</div>
+                    </div>
+                    
+                    <button onclick="goHome()" class="bg-white text-green-600 px-8 py-3 rounded-lg font-bold">
+                        Done
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderReportsList() {
+            const reports = getReports().reverse();
+            return `
+                <div class="min-h-screen bg-gray-100">
+                    <div class="bg-red-500 text-white p-4">
+                        <div class="flex items-center">
+                            <button onclick="goHome()" class="text-2xl mr-3">←</button>
+                            <h1 class="text-xl font-bold">Reported Issues</h1>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4">
+                        ${reports.length === 0 ? `
+                            <div class="text-center py-12 text-gray-400">
+                                <div class="text-5xl mb-4">📸</div>
+                                <p>No issues reported yet</p>
+                            </div>
+                        ` : `
+                            <div class="space-y-3">
+                                ${reports.map(r => {
+                                    const cat = ISSUE_CATEGORIES.find(c => c.id === r.category) || { icon: '❓', name: 'Issue' };
+                                    return `
+                                        <div class="bg-white rounded-lg p-4 shadow">
+                                            <div class="flex items-start">
+                                                ${r.photo ? `<img src="${r.photo}" alt="Issue" class="w-16 h-16 object-cover rounded mr-3">` : ''}
+                                                <div class="flex-1">
+                                                    <div class="flex items-center justify-between mb-1">
+                                                        <span class="font-bold flex items-center">
+                                                            <span class="mr-2">${cat.icon}</span>
+                                                            ${cat.name}
+                                                        </span>
+                                                        <span class="text-xs px-2 py-1 rounded ${r.status === 'open' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${r.status}</span>
+                                                    </div>
+                                                    <div class="text-sm text-gray-600">${r.campus}</div>
+                                                    <div class="text-sm text-gray-500">${r.location}</div>
+                                                    <div class="text-xs text-gray-400 mt-1">${r.timestamp} • ${r.team}</div>
+                                                    ${r.urgent ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded mt-2 inline-block">🚨 Urgent</span>' : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // QC AUDIT SCREENS (same as before but condensed)
+        // ============================================
         function renderSetup() {
             return `
                 <div class="min-h-screen bg-gray-100">
@@ -376,13 +718,12 @@
                             <button onclick="goHome()" class="text-2xl mr-3">←</button>
                             <div>
                                 <h1 class="text-xl font-bold">Setup Audit</h1>
-                                <p class="text-blue-200 text-sm">Select campus and optional zones</p>
+                                <p class="text-blue-200 text-sm">Select campus and zones</p>
                             </div>
                         </div>
                     </div>
                     
                     <div class="p-4 space-y-6">
-                        <!-- Campus -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Campus *</label>
                             <select id="campus" class="w-full border border-gray-300 rounded-lg p-3 text-lg bg-white">
@@ -391,13 +732,11 @@
                             </select>
                         </div>
                         
-                        <!-- Auditor Name -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Your Name *</label>
                             <input type="text" id="auditorName" placeholder="Enter your name" class="w-full border border-gray-300 rounded-lg p-3 text-lg">
                         </div>
                         
-                        <!-- Mandatory Zones -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Mandatory Zones (5)</label>
                             <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
@@ -405,21 +744,20 @@
                                     <div class="flex items-center">
                                         <span class="text-blue-500 mr-2">✓</span>
                                         <span>${ZONES[id].name}</span>
-                                        ${!ZONES[id].amberEligible ? '<span class="ml-auto text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Any defect = RED</span>' : ''}
+                                        ${!ZONES[id].amberEligible ? '<span class="ml-auto text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️ RED zone</span>' : ''}
                                     </div>
                                 `).join('')}
                             </div>
                         </div>
                         
-                        <!-- Optional Zones -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Optional Zones (select 2-6)</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Optional Zones</label>
                             <div class="space-y-2">
                                 ${OPTIONAL_ZONE_IDS.map(id => `
                                     <label class="flex items-center p-3 bg-white rounded-lg border border-gray-200 cursor-pointer">
                                         <input type="checkbox" value="${id}" class="optional-zone w-5 h-5 mr-3">
                                         <span class="flex-1">${ZONES[id].name}</span>
-                                        ${!ZONES[id].amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Any defect = RED</span>' : ''}
+                                        ${!ZONES[id].amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️</span>' : ''}
                                     </label>
                                 `).join('')}
                             </div>
@@ -435,7 +773,6 @@
 
         function renderAuditOverview() {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
-            
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
                     <div class="bg-blue-800 text-white p-4">
@@ -448,7 +785,6 @@
                         </div>
                     </div>
                     
-                    <!-- Progress -->
                     <div class="bg-white p-4 border-b">
                         <div class="flex justify-between text-sm text-gray-600 mb-2">
                             <span>Progress</span>
@@ -473,7 +809,6 @@
                         ` : ''}
                     </div>
                     
-                    <!-- Bottom Bar -->
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
                         ${Object.keys(state.zoneResults).length === allZones.length ? `
                             <button onclick="goToTourReady()" class="w-full bg-green-500 text-white py-4 rounded-xl text-lg font-bold">
@@ -495,25 +830,9 @@
             const isComplete = results !== undefined;
             const defects = isComplete ? countDefects(zoneId) : 0;
             
-            let statusIcon = '○';
-            let statusColor = 'text-gray-400';
-            let bgColor = 'bg-white';
-            
-            if (isComplete) {
-                if (defects === 0) {
-                    statusIcon = '✓';
-                    statusColor = 'text-green-500';
-                    bgColor = 'bg-green-50';
-                } else {
-                    statusIcon = defects.toString();
-                    statusColor = 'text-red-500';
-                    bgColor = 'bg-red-50';
-                }
-            }
-            
             return `
-                <button onclick="goToZone(${index})" class="w-full ${bgColor} p-4 rounded-lg border border-gray-200 flex items-center text-left">
-                    <span class="w-8 h-8 rounded-full ${isComplete ? (defects === 0 ? 'bg-green-500' : 'bg-red-500') : 'bg-gray-200'} text-white flex items-center justify-center mr-3 font-bold">
+                <button onclick="goToZone(${index})" class="w-full ${isComplete ? (defects === 0 ? 'bg-green-50' : 'bg-red-50') : 'bg-white'} p-4 rounded-lg border border-gray-200 flex items-center text-left">
+                    <span class="w-8 h-8 rounded-full ${isComplete ? (defects === 0 ? 'bg-green-500' : 'bg-red-500') : 'bg-gray-200'} text-white flex items-center justify-center mr-3 font-bold text-sm">
                         ${isComplete ? (defects === 0 ? '✓' : defects) : index + 1}
                     </span>
                     <div class="flex-1">
@@ -544,36 +863,26 @@
                         </div>
                     </div>
                     
-                    <!-- Progress bar -->
                     <div class="h-1 bg-gray-200">
                         <div class="h-full bg-blue-500" style="width: ${((state.currentZoneIndex + 1) / allZones.length) * 100}%"></div>
                     </div>
                     
                     ${!zone.amberEligible ? `
                         <div class="bg-red-100 border-l-4 border-red-500 p-3 m-4 rounded">
-                            <div class="font-medium text-red-800">⚠️ Amber-Ineligible Zone</div>
-                            <div class="text-sm text-red-700">Any defect in this zone = RED status</div>
-                        </div>
-                    ` : ''}
-                    
-                    ${zone.isSupplyCheck ? `
-                        <div class="bg-yellow-100 border-l-4 border-yellow-500 p-3 m-4 rounded">
-                            <div class="font-medium text-yellow-800">📦 Supply Check</div>
-                            <div class="text-sm text-yellow-700">"No" on items 1-4 triggers Cintas order (1-week lead time)</div>
+                            <div class="font-medium text-red-800">⚠️ Any defect = RED status</div>
                         </div>
                     ` : ''}
                     
                     <div class="p-4">
-                        <h2 class="font-bold text-gray-700 mb-3">${zone.isSupplyCheck ? 'Supply Readiness' : 'Cleanliness (Worksmith Performance)'}</h2>
                         <div class="space-y-3">
                             ${zone.cleanliness.map((q, idx) => `
                                 <div class="bg-white rounded-lg p-4 shadow-sm">
                                     <div class="text-sm mb-3">${idx + 1}. ${q}</div>
                                     <div class="flex gap-2">
-                                        <button onclick="setResponse('${zoneId}', ${idx}, 'yes')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'yes' ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}">
+                                        <button onclick="setResponse('${zoneId}', ${idx}, 'yes')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'yes' ? 'bg-green-500 text-white' : 'bg-gray-100'}">
                                             ✓ Yes
                                         </button>
-                                        <button onclick="setResponse('${zoneId}', ${idx}, 'no')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'no' ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}">
+                                        <button onclick="setResponse('${zoneId}', ${idx}, 'no')" class="flex-1 py-2 rounded font-medium ${results[idx] === 'no' ? 'bg-red-500 text-white' : 'bg-gray-100'}">
                                             ✗ No
                                         </button>
                                     </div>
@@ -582,10 +891,9 @@
                         </div>
                     </div>
                     
-                    <!-- Bottom Bar -->
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
-                        <button onclick="completeZone('${zoneId}')" id="zoneCompleteBtn" class="w-full py-4 rounded-xl text-lg font-bold ${isZoneComplete(zoneId) ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}" ${isZoneComplete(zoneId) ? '' : 'disabled'}>
-                            ${isZoneComplete(zoneId) ? 'Complete Zone → Condition Check' : `Answer all questions (${Object.keys(results).length}/${zone.cleanliness.length})`}
+                        <button onclick="completeZone('${zoneId}')" class="w-full py-4 rounded-xl text-lg font-bold ${isZoneComplete(zoneId) ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}" ${isZoneComplete(zoneId) ? '' : 'disabled'}>
+                            ${isZoneComplete(zoneId) ? 'Complete Zone → Condition Check' : `Answer all (${Object.keys(results).length}/${zone.cleanliness.length})`}
                         </button>
                     </div>
                 </div>
@@ -596,6 +904,7 @@
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
             const zoneId = allZones[state.currentZoneIndex];
             const zone = ZONES[zoneId];
+            const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
             
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
@@ -609,54 +918,60 @@
                         </div>
                     </div>
                     
-                    <div class="p-4 space-y-6">
+                    <div class="p-4 space-y-4">
                         <div class="bg-white rounded-lg p-6 shadow">
                             <div class="text-lg font-medium mb-4">Would you route a tour away from this zone due to building condition?</div>
                             
                             <div class="space-y-3">
-                                <button onclick="setConditionAlert('${zoneId}', false)" class="w-full p-4 rounded-lg border-2 ${getConditionAlert(zoneId) === false ? 'border-green-500 bg-green-50' : 'border-gray-200'} flex items-center">
+                                <button onclick="setConditionAlert('${zoneId}', false)" class="w-full p-4 rounded-lg border-2 ${alert?.hasIssue === false ? 'border-green-500 bg-green-50' : 'border-gray-200'} flex items-center">
                                     <span class="text-2xl mr-3">✓</span>
                                     <div class="text-left">
-                                        <div class="font-medium">No</div>
-                                        <div class="text-sm text-gray-500">Zone condition is acceptable for tours</div>
+                                        <div class="font-medium">No — Condition OK</div>
                                     </div>
                                 </button>
                                 
-                                <button onclick="setConditionAlert('${zoneId}', true)" class="w-full p-4 rounded-lg border-2 ${getConditionAlert(zoneId) === true ? 'border-red-500 bg-red-50' : 'border-gray-200'} flex items-center">
+                                <button onclick="setConditionAlert('${zoneId}', true)" class="w-full p-4 rounded-lg border-2 ${alert?.hasIssue === true ? 'border-red-500 bg-red-50' : 'border-gray-200'} flex items-center">
                                     <span class="text-2xl mr-3">⚠️</span>
                                     <div class="text-left">
                                         <div class="font-medium">Yes — Condition Issue</div>
-                                        <div class="text-sm text-gray-500">Routes to B&G (photo required)</div>
+                                        <div class="text-sm text-gray-500">Photo required</div>
                                     </div>
                                 </button>
                             </div>
                         </div>
                         
-                        ${getConditionAlert(zoneId) === true ? `
+                        ${alert?.hasIssue === true ? `
                             <div class="bg-white rounded-lg p-4 shadow slide-up">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Describe the condition issue *</label>
-                                <input type="text" id="conditionNote" maxlength="100" placeholder="e.g., Hole in drywall near door" class="w-full border border-gray-300 rounded-lg p-3" value="${getConditionNote(zoneId) || ''}">
-                                <div class="text-xs text-gray-400 mt-1 text-right"><span id="charCount">${(getConditionNote(zoneId) || '').length}</span>/100</div>
-                                
-                                <div class="mt-4">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Photo (required for production)</label>
-                                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center text-gray-400">
-                                        📷 Photo capture<br><span class="text-xs">(Enabled in production version)</span>
-                                    </div>
+                                <!-- Photo -->
+                                <div class="mb-4">
+                                    ${alert.photo ? `
+                                        <div class="relative">
+                                            <img src="${alert.photo}" alt="Condition issue" class="w-full rounded-lg">
+                                            <button onclick="takeConditionPhoto('${zoneId}')" class="absolute bottom-2 right-2 bg-white px-3 py-1 rounded-lg text-sm shadow">🔄 Retake</button>
+                                        </div>
+                                    ` : `
+                                        <button onclick="takeConditionPhoto('${zoneId}')" class="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                                            <div class="text-4xl mb-2">📷</div>
+                                            <div class="font-medium">Tap to Take Photo</div>
+                                        </button>
+                                    `}
                                 </div>
+                                
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Describe the issue *</label>
+                                <input type="text" id="conditionNote" maxlength="100" placeholder="e.g., Hole in drywall near door" class="w-full border border-gray-300 rounded-lg p-3" value="${alert.note || ''}" oninput="updateConditionNote(this.value)">
+                                <div class="text-xs text-gray-400 mt-1 text-right">${(alert.note || '').length}/100</div>
                             </div>
                         ` : ''}
                         
                         <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
                             <div class="text-sm text-blue-800">
-                                <strong>Note:</strong> Condition alerts do NOT affect your cleanliness score. They route directly to B&G for building maintenance.
+                                Condition alerts route to B&G and do NOT affect cleanliness score.
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Bottom Bar -->
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
-                        <button onclick="finishZone()" id="conditionCompleteBtn" class="w-full py-4 rounded-xl text-lg font-bold ${canCompleteCondition(zoneId) ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-500'}" ${canCompleteCondition(zoneId) ? '' : 'disabled'}>
+                        <button onclick="finishZone()" class="w-full py-4 rounded-xl text-lg font-bold ${canCompleteCondition(zoneId) ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-500'}" ${canCompleteCondition(zoneId) ? '' : 'disabled'}>
                             ${state.currentZoneIndex < allZones.length - 1 ? 'Next Zone →' : 'Finish Walkthrough →'}
                         </button>
                     </div>
@@ -670,38 +985,31 @@
                     <div class="bg-blue-800 text-white p-4">
                         <div class="flex items-center">
                             <button onclick="goToAuditOverview()" class="text-2xl mr-3">←</button>
-                            <div>
-                                <h1 class="text-xl font-bold">Final Question</h1>
-                                <p class="text-blue-200 text-sm">Tour Readiness Assessment</p>
-                            </div>
+                            <h1 class="text-xl font-bold">Final Question</h1>
                         </div>
                     </div>
                     
-                    <div class="p-4 space-y-6">
+                    <div class="p-4">
                         <div class="bg-white rounded-lg p-6 shadow">
                             <div class="text-lg font-medium mb-4">Based on your entire walkthrough, could a parent tour happen right now?</div>
                             
                             <div class="space-y-3">
                                 <button onclick="setTourReady('yes')" class="w-full p-4 rounded-lg border-2 ${state.tourReady === 'yes' ? 'border-green-500 bg-green-50' : 'border-gray-200'} flex items-center">
                                     <span class="text-2xl mr-3">✓</span>
-                                    <div class="text-left">
-                                        <div class="font-medium">Yes — Tour Ready</div>
-                                        <div class="text-sm text-gray-500">Campus is presentable for visitors</div>
-                                    </div>
+                                    <div class="font-medium">Yes — Tour Ready</div>
                                 </button>
                                 
                                 <button onclick="setTourReady('no')" class="w-full p-4 rounded-lg border-2 ${state.tourReady === 'no' ? 'border-red-500 bg-red-50' : 'border-gray-200'} flex items-center">
                                     <span class="text-2xl mr-3">✗</span>
-                                    <div class="text-left">
+                                    <div>
                                         <div class="font-medium">No — Not Tour Ready</div>
-                                        <div class="text-sm text-red-600 font-medium">⚠️ Automatic RED status</div>
+                                        <div class="text-sm text-red-600">⚠️ Automatic RED</div>
                                     </div>
                                 </button>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Bottom Bar -->
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
                         <button onclick="goToSummary()" class="w-full py-4 rounded-xl text-lg font-bold ${state.tourReady !== null ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}" ${state.tourReady !== null ? '' : 'disabled'}>
                             Review Summary →
@@ -717,80 +1025,53 @@
             const totalDefects = getTotalDefects();
             const duration = Math.round((Date.now() - state.startTime) / 60000);
             
-            const statusColors = {
-                GREEN: 'bg-green-500',
-                AMBER: 'bg-yellow-500',
-                RED: 'bg-red-500'
-            };
-            
             return `
                 <div class="min-h-screen bg-gray-100 pb-24">
-                    <div class="${statusColors[status]} text-white p-6 text-center">
-                        <div class="text-6xl mb-2">${status === 'GREEN' ? '✓' : status === 'AMBER' ? '⚠️' : '✗'}</div>
+                    <div class="${status === 'GREEN' ? 'bg-green-500' : status === 'AMBER' ? 'bg-yellow-500' : 'bg-red-500'} text-white p-6 text-center">
+                        <div class="text-5xl mb-2">${status === 'GREEN' ? '✓' : status === 'AMBER' ? '⚠️' : '✗'}</div>
                         <div class="text-3xl font-bold">${status}</div>
-                        <div class="text-lg opacity-90">${state.campus}</div>
+                        <div class="opacity-90">${state.campus}</div>
                     </div>
                     
                     <div class="p-4 space-y-4">
-                        <!-- Stats -->
                         <div class="grid grid-cols-3 gap-3">
-                            <div class="bg-white p-4 rounded-lg shadow text-center">
-                                <div class="text-2xl font-bold">${allZones.length}</div>
+                            <div class="bg-white p-3 rounded-lg shadow text-center">
+                                <div class="text-xl font-bold">${allZones.length}</div>
                                 <div class="text-xs text-gray-500">Zones</div>
                             </div>
-                            <div class="bg-white p-4 rounded-lg shadow text-center">
-                                <div class="text-2xl font-bold ${totalDefects > 0 ? 'text-red-500' : 'text-green-500'}">${totalDefects}</div>
+                            <div class="bg-white p-3 rounded-lg shadow text-center">
+                                <div class="text-xl font-bold ${totalDefects > 0 ? 'text-red-500' : 'text-green-500'}">${totalDefects}</div>
                                 <div class="text-xs text-gray-500">Defects</div>
                             </div>
-                            <div class="bg-white p-4 rounded-lg shadow text-center">
-                                <div class="text-2xl font-bold">${duration}m</div>
+                            <div class="bg-white p-3 rounded-lg shadow text-center">
+                                <div class="text-xl font-bold">${duration}m</div>
                                 <div class="text-xs text-gray-500">Duration</div>
                             </div>
                         </div>
                         
-                        <!-- Tour Ready -->
-                        <div class="bg-white p-4 rounded-lg shadow flex items-center justify-between">
-                            <span class="font-medium">Tour Ready?</span>
-                            <span class="${state.tourReady === 'yes' ? 'text-green-600' : 'text-red-600'} font-bold">
-                                ${state.tourReady === 'yes' ? '✓ Yes' : '✗ No'}
-                            </span>
+                        <div class="bg-white rounded-lg shadow divide-y">
+                            ${allZones.map(zoneId => {
+                                const zone = ZONES[zoneId];
+                                const defects = countDefects(zoneId);
+                                return `
+                                    <div class="p-3 flex items-center">
+                                        <span class="w-7 h-7 rounded-full ${defects === 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} flex items-center justify-center mr-3 font-bold text-sm">
+                                            ${defects === 0 ? '✓' : defects}
+                                        </span>
+                                        <span class="flex-1 text-sm">${zone.name}</span>
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
                         
-                        <!-- Zone Results -->
-                        <div class="bg-white rounded-lg shadow">
-                            <div class="p-4 border-b font-bold">Zone Results</div>
-                            <div class="divide-y">
-                                ${allZones.map(zoneId => {
-                                    const zone = ZONES[zoneId];
-                                    const defects = countDefects(zoneId);
-                                    return `
-                                        <div class="p-3 flex items-center">
-                                            <span class="w-8 h-8 rounded-full ${defects === 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} flex items-center justify-center mr-3 font-bold">
-                                                ${defects === 0 ? '✓' : defects}
-                                            </span>
-                                            <div class="flex-1">
-                                                <div class="font-medium">${zone.name}</div>
-                                            </div>
-                                            ${!zone.amberEligible && defects > 0 ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">→ RED</span>' : ''}
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        </div>
-                        
-                        <!-- Condition Alerts -->
-                        ${state.conditionAlerts.length > 0 ? `
-                            <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                                <div class="font-bold text-orange-800 mb-2">⚠️ Condition Alerts (${state.conditionAlerts.length})</div>
-                                <div class="text-sm text-orange-700">
-                                    ${state.conditionAlerts.map(a => `• ${ZONES[a.zoneId].name}: ${a.note}`).join('<br>')}
-                                </div>
-                                <div class="text-xs text-orange-600 mt-2">These will be routed to B&G</div>
+                        ${state.conditionAlerts.filter(a => a.hasIssue).length > 0 ? `
+                            <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                <div class="font-bold text-orange-800 mb-1">⚠️ ${state.conditionAlerts.filter(a => a.hasIssue).length} Condition Alert(s)</div>
+                                <div class="text-sm text-orange-700">Will be routed to B&G</div>
                             </div>
                         ` : ''}
                     </div>
                     
-                    <!-- Bottom Bar -->
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
                         <button onclick="submitAudit()" class="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold">
                             ✓ Submit Audit
@@ -802,36 +1083,19 @@
 
         function renderComplete() {
             const status = calculateStatus();
-            const statusColors = {
-                GREEN: 'bg-green-500',
-                AMBER: 'bg-yellow-500',
-                RED: 'bg-red-500'
-            };
-            
             return `
-                <div class="min-h-screen ${statusColors[status]} flex flex-col items-center justify-center p-8 text-white text-center">
+                <div class="min-h-screen ${status === 'GREEN' ? 'bg-green-500' : status === 'AMBER' ? 'bg-yellow-500' : 'bg-red-500'} flex flex-col items-center justify-center p-8 text-white text-center">
                     <div class="text-8xl mb-6">✅</div>
                     <h1 class="text-3xl font-bold mb-2">Audit Submitted!</h1>
-                    <div class="text-6xl font-bold my-4">${status}</div>
-                    <p class="text-lg opacity-90 mb-8">${state.campus}</p>
-                    
-                    ${state.conditionAlerts.length > 0 ? `
-                        <div class="bg-white/20 rounded-lg p-4 mb-8 text-left w-full max-w-sm">
-                            <div class="font-bold mb-2">📋 ${state.conditionAlerts.length} Condition Alert(s)</div>
-                            <div class="text-sm opacity-90">Routed to B&G for follow-up</div>
-                        </div>
-                    ` : ''}
-                    
-                    <button onclick="goHome()" class="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold">
-                        Done
-                    </button>
+                    <div class="text-5xl font-bold my-4">${status}</div>
+                    <p class="opacity-90 mb-8">${state.campus}</p>
+                    <button onclick="goHome()" class="bg-white text-gray-800 px-8 py-3 rounded-lg font-bold">Done</button>
                 </div>
             `;
         }
 
         function renderHistory() {
             const audits = getAudits().reverse();
-            
             return `
                 <div class="min-h-screen bg-gray-100">
                     <div class="bg-blue-800 text-white p-4">
@@ -851,7 +1115,7 @@
                             <div class="space-y-3">
                                 ${audits.map(a => `
                                     <div class="bg-white rounded-lg p-4 shadow">
-                                        <div class="flex items-center mb-2">
+                                        <div class="flex items-center">
                                             <span class="text-2xl mr-3">${a.status === 'GREEN' ? '🟢' : a.status === 'AMBER' ? '🟡' : '🔴'}</span>
                                             <div class="flex-1">
                                                 <div class="font-bold">${a.campus}</div>
@@ -861,10 +1125,6 @@
                                                 <div class="font-bold ${a.status === 'GREEN' ? 'text-green-600' : a.status === 'AMBER' ? 'text-yellow-600' : 'text-red-600'}">${a.status}</div>
                                                 <div class="text-sm text-gray-500">${a.defects} defect${a.defects !== 1 ? 's' : ''}</div>
                                             </div>
-                                        </div>
-                                        <div class="text-xs text-gray-400">
-                                            ${a.zones} zones • ${a.duration}m • Tour Ready: ${a.tourReady ? 'Yes' : 'No'}
-                                            ${a.conditionAlerts > 0 ? ` • ${a.conditionAlerts} condition alert(s)` : ''}
                                         </div>
                                     </div>
                                 `).join('')}
@@ -878,63 +1138,38 @@
         // ============================================
         // EVENT HANDLERS
         // ============================================
-        function attachEventListeners() {
-            const conditionNote = document.getElementById('conditionNote');
-            if (conditionNote) {
-                conditionNote.addEventListener('input', (e) => {
-                    document.getElementById('charCount').textContent = e.target.value.length;
-                    updateConditionNote(e.target.value);
-                });
-            }
-        }
+        function attachEventListeners() {}
 
         function goHome() {
             state = {
                 screen: 'home',
-                campus: '',
-                auditorName: '',
-                startTime: null,
-                selectedOptionalZones: [],
-                currentZoneIndex: 0,
-                zoneResults: {},
-                conditionAlerts: [],
-                tourReady: null
+                campus: '', auditorName: '', startTime: null,
+                selectedOptionalZones: [], currentZoneIndex: 0,
+                zoneResults: {}, conditionAlerts: [], tourReady: null,
+                reportCampus: '', reportPhoto: null, reportCategory: null,
+                reportLocation: '', reportNote: '', reportUrgent: false
             };
             render();
         }
 
-        function goToHistory() {
-            state.screen = 'history';
-            render();
-        }
-
-        function startAudit() {
-            state.screen = 'setup';
-            render();
-        }
+        function goToHistory() { state.screen = 'history'; render(); }
+        function goToReportsList() { state.screen = 'reports_list'; render(); }
+        function startAudit() { state.screen = 'setup'; render(); }
+        function startReport() { state.screen = 'report_start'; render(); }
 
         function beginAudit() {
             const campus = document.getElementById('campus').value;
             const auditorName = document.getElementById('auditorName').value;
-            const optionalZones = Array.from(document.querySelectorAll('.optional-zone:checked')).map(el => el.value);
-            
-            if (!campus || !auditorName) {
-                alert('Please select a campus and enter your name');
-                return;
-            }
-            
+            if (!campus || !auditorName) { alert('Please select campus and enter name'); return; }
             state.campus = campus;
             state.auditorName = auditorName;
-            state.selectedOptionalZones = optionalZones;
+            state.selectedOptionalZones = Array.from(document.querySelectorAll('.optional-zone:checked')).map(el => el.value);
             state.startTime = Date.now();
             state.screen = 'audit';
             render();
         }
 
-        function goToAuditOverview() {
-            state.screen = 'audit';
-            render();
-        }
+        function goToAuditOverview() { state.screen = 'audit'; render(); }
 
         function goToNextIncomplete() {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
@@ -948,16 +1183,10 @@
             }
         }
 
-        function goToZone(index) {
-            state.currentZoneIndex = index;
-            state.screen = 'zone';
-            render();
-        }
+        function goToZone(index) { state.currentZoneIndex = index; state.screen = 'zone'; render(); }
 
         function setResponse(zoneId, questionIndex, value) {
-            if (!state.zoneResults[zoneId]) {
-                state.zoneResults[zoneId] = {};
-            }
+            if (!state.zoneResults[zoneId]) state.zoneResults[zoneId] = {};
             state.zoneResults[zoneId][questionIndex] = value;
             render();
         }
@@ -969,51 +1198,41 @@
         }
 
         function completeZone(zoneId) {
-            if (isZoneComplete(zoneId)) {
-                state.screen = 'condition';
-                render();
-            }
-        }
-
-        function getConditionAlert(zoneId) {
-            const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
-            return alert ? alert.hasIssue : null;
-        }
-
-        function getConditionNote(zoneId) {
-            const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
-            return alert ? alert.note : '';
+            if (isZoneComplete(zoneId)) { state.screen = 'condition'; render(); }
         }
 
         function setConditionAlert(zoneId, hasIssue) {
-            const existingIndex = state.conditionAlerts.findIndex(a => a.zoneId === zoneId);
-            if (existingIndex >= 0) {
-                if (hasIssue) {
-                    state.conditionAlerts[existingIndex].hasIssue = true;
-                } else {
-                    state.conditionAlerts.splice(existingIndex, 1);
-                }
+            const idx = state.conditionAlerts.findIndex(a => a.zoneId === zoneId);
+            if (idx >= 0) {
+                if (hasIssue) state.conditionAlerts[idx].hasIssue = true;
+                else state.conditionAlerts.splice(idx, 1);
             } else if (hasIssue) {
-                state.conditionAlerts.push({ zoneId, hasIssue: true, note: '' });
+                state.conditionAlerts.push({ zoneId, hasIssue: true, note: '', photo: null });
+            } else {
+                state.conditionAlerts.push({ zoneId, hasIssue: false, note: '', photo: null });
             }
             render();
+        }
+
+        function takeConditionPhoto(zoneId) {
+            openCamera((imageData) => {
+                const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
+                if (alert) alert.photo = imageData;
+                render();
+            }, 'Condition Issue Photo');
         }
 
         function updateConditionNote(note) {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
             const zoneId = allZones[state.currentZoneIndex];
             const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
-            if (alert) {
-                alert.note = note;
-            }
+            if (alert) alert.note = note;
         }
 
         function canCompleteCondition(zoneId) {
             const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
-            if (!alert) return true; // No alert selected = No issue
-            if (alert.hasIssue === false) return true;
-            if (alert.hasIssue === true && alert.note && alert.note.length > 0) return true;
-            return false;
+            if (!alert || alert.hasIssue === false) return true;
+            return alert.hasIssue && alert.photo && alert.note && alert.note.length > 0;
         }
 
         function finishZone() {
@@ -1027,30 +1246,14 @@
             render();
         }
 
-        function goToTourReady() {
-            state.screen = 'tourready';
-            render();
-        }
-
-        function setTourReady(value) {
-            state.tourReady = value;
-            render();
-        }
-
-        function goToSummary() {
-            state.screen = 'summary';
-            render();
-        }
-
-        function confirmExit() {
-            if (confirm('Exit audit? Your progress will be lost.')) {
-                goHome();
-            }
-        }
+        function goToTourReady() { state.screen = 'tourready'; render(); }
+        function setTourReady(value) { state.tourReady = value; render(); }
+        function goToSummary() { state.screen = 'summary'; render(); }
+        function confirmExit() { if (confirm('Exit? Progress will be lost.')) goHome(); }
 
         function submitAudit() {
             const allZones = [...MANDATORY_ZONE_IDS, ...state.selectedOptionalZones];
-            const audit = {
+            saveAudit({
                 id: Date.now(),
                 date: new Date().toLocaleDateString(),
                 time: new Date().toLocaleTimeString(),
@@ -1064,15 +1267,79 @@
                 conditionAlerts: state.conditionAlerts.filter(a => a.hasIssue).length,
                 zoneResults: state.zoneResults,
                 conditionAlertDetails: state.conditionAlerts.filter(a => a.hasIssue)
-            };
-            
-            saveAudit(audit);
+            });
             state.screen = 'complete';
+            render();
+        }
+
+        // See It Report It handlers
+        function openReportCamera() {
+            const campus = document.getElementById('reportCampus')?.value;
+            if (!campus) { alert('Please select a campus first'); return; }
+            state.reportCampus = campus;
+            openCamera((imageData) => {
+                state.reportPhoto = imageData;
+                state.screen = 'report_photo';
+                render();
+            }, 'Capture Issue');
+        }
+
+        function retakePhoto() {
+            openCamera((imageData) => {
+                state.reportPhoto = imageData;
+                render();
+            }, 'Capture Issue');
+        }
+
+        function setReportCategory(catId) { state.reportCategory = catId; render(); }
+        function toggleUrgent() { state.reportUrgent = !state.reportUrgent; render(); }
+
+        function canSubmitReport() {
+            const location = document.getElementById('reportLocation')?.value || state.reportLocation;
+            return state.reportPhoto && state.reportCategory && location;
+        }
+
+        function submitReport() {
+            state.reportLocation = document.getElementById('reportLocation')?.value || '';
+            state.reportNote = document.getElementById('reportNote')?.value || '';
+            
+            const cat = ISSUE_CATEGORIES.find(c => c.id === state.reportCategory);
+            saveReport({
+                id: Date.now(),
+                timestamp: new Date().toLocaleString(),
+                campus: state.reportCampus,
+                photo: state.reportPhoto,
+                category: state.reportCategory,
+                location: state.reportLocation,
+                note: state.reportNote,
+                urgent: state.reportUrgent,
+                team: cat?.team || 'Facilities',
+                status: 'open'
+            });
+            state.screen = 'report_complete';
             render();
         }
 
         // Initialize
         render();
     </script>
+    
+    <!-- Camera Modal -->
+    <div id="cameraModal" class="fixed inset-0 z-50 hidden" style="background: black;">
+        <video id="cameraFeed" autoplay playsinline class="w-full h-full object-cover"></video>
+        <canvas id="cameraCanvas" class="hidden"></canvas>
+        <div class="absolute inset-0 flex flex-col">
+            <div class="bg-black/50 p-4 flex justify-between items-center">
+                <button onclick="closeCamera()" class="text-white text-lg">✕ Cancel</button>
+                <span class="text-white text-sm" id="cameraLabel">📷 Take Photo</span>
+            </div>
+            <div class="flex-1"></div>
+            <div class="bg-black/50 p-6 flex justify-center">
+                <button onclick="capturePhoto()" class="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-white/20 active:bg-white/40">
+                    <div class="w-16 h-16 rounded-full bg-white"></div>
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
