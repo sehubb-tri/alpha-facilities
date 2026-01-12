@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#2B4EF6">
+    <meta name="theme-color" content="#1e3a5f">
     <title>Alpha Facilities</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏫</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,16 +15,16 @@
                 extend: {
                     colors: {
                         alpha: {
-                            50: '#eef2ff',
-                            100: '#e0e7ff',
-                            200: '#c7d2fe',
-                            300: '#a5b4fc',
-                            400: '#818cf8',
-                            500: '#2B4EF6',
-                            600: '#2442d4',
-                            700: '#1e38b2',
-                            800: '#1a3091',
-                            900: '#162970',
+                            50: '#f0f4f8',
+                            100: '#d9e2ec',
+                            200: '#bcccdc',
+                            300: '#9fb3c8',
+                            400: '#829ab1',
+                            500: '#1e3a5f',
+                            600: '#1a3352',
+                            700: '#162b45',
+                            800: '#102338',
+                            900: '#0a1628',
                         }
                     }
                 }
@@ -39,7 +39,7 @@
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
-        .alpha-gradient { background: linear-gradient(135deg, #2B4EF6 0%, #1a3091 100%); }
+        .alpha-gradient { background: linear-gradient(135deg, #1e3a5f 0%, #0a1628 100%); }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -50,7 +50,7 @@
 
     <script>
         // ============================================
-        // CAMERA FUNCTIONS - WITH FALLBACK
+        // CAMERA FUNCTIONS - FIXED
         // ============================================
         let cameraStream = null;
         let cameraCallback = null;
@@ -58,7 +58,13 @@
         async function openCamera(callback, label = 'Take Photo') {
             cameraCallback = callback;
             
-            // Try native camera API first
+            // Check if we have camera support
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.log('No camera API, using file picker');
+                useFilePicker(callback);
+                return;
+            }
+            
             try {
                 const modal = document.getElementById('cameraModal');
                 const video = document.getElementById('cameraFeed');
@@ -73,7 +79,6 @@
                 modal.classList.remove('hidden');
             } catch (err) {
                 console.log('Camera API failed, using file picker fallback:', err);
-                // Fallback to file input
                 useFilePicker(callback);
             }
         }
@@ -89,7 +94,7 @@
                     };
                     reader.readAsDataURL(file);
                 }
-                fileInput.value = ''; // Reset for next use
+                fileInput.value = '';
             };
             fileInput.click();
         }
@@ -97,26 +102,36 @@
         function capturePhoto() {
             const video = document.getElementById('cameraFeed');
             const canvas = document.getElementById('cameraCanvas');
+            
+            // Save callback BEFORE closing camera (which nulls it)
+            const callback = cameraCallback;
+            
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
             const imageData = canvas.toDataURL('image/jpeg', 0.7);
+            
+            // Close camera first
             closeCamera();
-            if (cameraCallback) { cameraCallback(imageData); cameraCallback = null; }
+            
+            // THEN call callback with the image data
+            if (callback) {
+                callback(imageData);
+            }
         }
 
         function closeCamera() {
             const modal = document.getElementById('cameraModal');
             const video = document.getElementById('cameraFeed');
-            if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); cameraStream = null; }
+            if (cameraStream) { 
+                cameraStream.getTracks().forEach(track => track.stop()); 
+                cameraStream = null; 
+            }
             if (video) video.srcObject = null;
             if (modal) modal.classList.add('hidden');
             cameraCallback = null;
         }
 
-        // ============================================
-        // CAMPUS DATA - REAL SCHOOLS
-        // ============================================
         // ============================================
         // CAMPUS DATA - FROM INTERNAL SPREADSHEET
         // ============================================
@@ -323,22 +338,6 @@
         const MANDATORY_ZONE_IDS = ['entry', 'hallway', 'restroom_primary', 'commons', 'supply_closet'];
         const OPTIONAL_ZONE_IDS = ['restroom_additional', 'classroom', 'office', 'gym', 'cafeteria'];
 
-        // Alpha Logo SVG
-        const ALPHA_LOGO = `<svg viewBox="0 0 200 60" class="h-12 w-auto">
-            <defs>
-                <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:#e0e7ff;stop-opacity:1" />
-                </linearGradient>
-            </defs>
-            <polygon fill="url(#logoGrad)" points="10,30 25,10 40,20 55,5 50,25 60,30 50,35 55,55 40,40 25,50 10,30"/>
-            <rect fill="white" opacity="0.8" x="2" y="25" width="4" height="4"/>
-            <rect fill="white" opacity="0.6" x="0" y="32" width="3" height="3"/>
-            <rect fill="white" opacity="0.4" x="4" y="38" width="2" height="2"/>
-            <text x="70" y="28" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="bold">ALPHA</text>
-            <text x="70" y="48" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" opacity="0.9">FACILITIES</text>
-        </svg>`;
-
         // ============================================
         // APP STATE
         // ============================================
@@ -434,7 +433,10 @@
             return `
                 <div class="min-h-screen alpha-gradient text-white">
                     <div class="p-6 pt-10 pb-4">
-                        ${ALPHA_LOGO}
+                        <div class="flex items-center">
+                            <div class="text-3xl font-bold tracking-tight">ALPHA</div>
+                            <div class="ml-2 text-lg opacity-80">FACILITIES</div>
+                        </div>
                     </div>
                     
                     <div class="px-6 space-y-3">
@@ -453,18 +455,18 @@
                         <div class="grid grid-cols-2 gap-3">
                             <button onclick="goToHistory()" class="bg-white/10 hover:bg-white/20 backdrop-blur p-4 rounded-xl text-left transition-colors">
                                 <div class="text-3xl font-bold">${audits.length}</div>
-                                <div class="text-alpha-200 text-sm">QC Audits</div>
+                                <div class="text-white/70 text-sm">QC Audits</div>
                             </button>
                             <button onclick="goToReportsList()" class="bg-white/10 hover:bg-white/20 backdrop-blur p-4 rounded-xl text-left transition-colors">
                                 <div class="text-3xl font-bold">${reports.length}</div>
-                                <div class="text-alpha-200 text-sm">Issues Reported</div>
+                                <div class="text-white/70 text-sm">Issues Reported</div>
                                 ${openReports > 0 ? `<div class="text-yellow-300 text-xs mt-1">${openReports} open</div>` : ''}
                             </button>
                         </div>
                     </div>
                     
                     <div class="bg-white text-gray-800 rounded-t-3xl mt-2 p-6 min-h-[280px]">
-                        <h2 class="font-bold text-lg mb-4 text-alpha-600">Recent Activity</h2>
+                        <h2 class="font-bold text-lg mb-4 text-alpha-500">Recent Activity</h2>
                         ${renderRecentActivity(audits, reports)}
                     </div>
                 </div>
@@ -511,7 +513,6 @@
         // CAMPUS SELECTOR
         // ============================================
         function renderCampusSelector(selectedName, inputId) {
-            // Group by state
             const byState = {};
             CAMPUSES.forEach(c => {
                 if (!byState[c.state]) byState[c.state] = [];
@@ -650,8 +651,8 @@
                             </label>
                         </div>
                         
-                        ${state.reportCategory ? `<div class="bg-alpha-50 rounded-lg p-3 border border-alpha-200">
-                            <div class="text-sm text-alpha-700"><strong>Routes to:</strong> ${ISSUE_CATEGORIES.find(c => c.id === state.reportCategory)?.team || 'Facilities'}</div>
+                        ${state.reportCategory ? `<div class="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                            <div class="text-sm text-blue-700"><strong>Routes to:</strong> ${ISSUE_CATEGORIES.find(c => c.id === state.reportCategory)?.team || 'Facilities'}</div>
                         </div>` : ''}
                     </div>
                     
@@ -730,7 +731,7 @@
                             <button onclick="goHome()" class="text-2xl mr-3">←</button>
                             <div>
                                 <h1 class="text-xl font-bold">Daily QC Setup</h1>
-                                <p class="text-alpha-200 text-sm">Select campus and zones</p>
+                                <p class="text-white/70 text-sm">Select campus and zones</p>
                             </div>
                         </div>
                     </div>
@@ -745,9 +746,9 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Mandatory Zones (5)</label>
-                            <div class="bg-alpha-50 border border-alpha-200 rounded-lg p-3 space-y-2">
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
                                 ${MANDATORY_ZONE_IDS.map(id => `<div class="flex items-center">
-                                    <span class="text-alpha-500 mr-2">✓</span>
+                                    <span class="text-blue-500 mr-2">✓</span>
                                     <span>${ZONES[id].name}</span>
                                     ${!ZONES[id].amberEligible ? '<span class="ml-auto text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️ RED</span>' : ''}
                                 </div>`).join('')}
@@ -757,7 +758,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">Optional Zones</label>
                             <div class="space-y-2">
                                 ${OPTIONAL_ZONE_IDS.map(id => `<label class="flex items-center p-3 bg-white rounded-lg border border-gray-200 cursor-pointer">
-                                    <input type="checkbox" value="${id}" class="optional-zone w-5 h-5 mr-3 accent-alpha-500">
+                                    <input type="checkbox" value="${id}" class="optional-zone w-5 h-5 mr-3 accent-blue-500">
                                     <span class="flex-1">${ZONES[id].name}</span>
                                     ${!ZONES[id].amberEligible ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️</span>' : ''}
                                 </label>`).join('')}
@@ -780,7 +781,7 @@
                             <button onclick="confirmExit()" class="text-2xl mr-3">←</button>
                             <div>
                                 <h1 class="text-xl font-bold">${state.campus?.name || ''}</h1>
-                                <p class="text-alpha-200 text-sm">${state.campus?.city || ''}, ${state.campus?.state || ''}</p>
+                                <p class="text-white/70 text-sm">${state.campus?.city || ''}, ${state.campus?.state || ''}</p>
                             </div>
                         </div>
                     </div>
@@ -842,7 +843,7 @@
                             <button onclick="goToAuditOverview()" class="text-2xl">←</button>
                             <div class="text-center">
                                 <h1 class="text-lg font-bold">${zone.name}</h1>
-                                <p class="text-alpha-200 text-sm">Zone ${state.currentZoneIndex + 1} of ${allZones.length}</p>
+                                <p class="text-white/70 text-sm">Zone ${state.currentZoneIndex + 1} of ${allZones.length}</p>
                             </div>
                             <div class="w-8"></div>
                         </div>
@@ -917,8 +918,8 @@
                             <input type="text" id="conditionNote" maxlength="100" placeholder="e.g., Hole in drywall near door" class="w-full border border-gray-300 rounded-lg p-3" value="${alert.note || ''}" oninput="updateConditionNote(this.value)">
                             <div class="text-xs text-gray-400 mt-1 text-right">${(alert.note || '').length}/100</div>
                         </div>` : ''}
-                        <div class="bg-alpha-50 border border-alpha-200 rounded-lg p-3">
-                            <div class="text-sm text-alpha-700">B&G alerts are separate from cleanliness and do NOT affect your score.</div>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div class="text-sm text-blue-700">B&G alerts are separate from cleanliness and do NOT affect your score.</div>
                         </div>
                     </div>
                     <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
@@ -1090,16 +1091,21 @@
             return Object.keys(results).length === zone.cleanliness.length;
         }
         function completeZone(zoneId) { if (isZoneComplete(zoneId)) { state.screen = 'condition'; render(); } }
+        
         function setConditionAlert(zoneId, hasIssue) {
             const idx = state.conditionAlerts.findIndex(a => a.zoneId === zoneId);
             if (idx >= 0) {
-                if (hasIssue) state.conditionAlerts[idx].hasIssue = true;
-                else state.conditionAlerts.splice(idx, 1);
+                state.conditionAlerts[idx].hasIssue = hasIssue;
+                if (!hasIssue) {
+                    state.conditionAlerts[idx].photo = null;
+                    state.conditionAlerts[idx].note = '';
+                }
             } else {
                 state.conditionAlerts.push({ zoneId, hasIssue, note: '', photo: null });
             }
             render();
         }
+        
         function takeConditionPhoto(zoneId) {
             openCamera((imageData) => {
                 const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
@@ -1115,7 +1121,8 @@
         }
         function canCompleteCondition(zoneId) {
             const alert = state.conditionAlerts.find(a => a.zoneId === zoneId);
-            if (!alert || alert.hasIssue === false) return true;
+            if (!alert) return false;
+            if (alert.hasIssue === false) return true;
             return alert.hasIssue && alert.photo && alert.note && alert.note.length > 0;
         }
         function finishZone() {
@@ -1147,9 +1154,18 @@
             const campusName = document.getElementById('reportCampus')?.value;
             if (!campusName) { alert('Please select a campus first'); return; }
             state.reportCampus = CAMPUSES.find(c => c.name === campusName);
-            openCamera((imageData) => { state.reportPhoto = imageData; state.screen = 'report_photo'; render(); }, 'Capture Issue');
+            openCamera((imageData) => { 
+                state.reportPhoto = imageData; 
+                state.screen = 'report_photo'; 
+                render(); 
+            }, 'Capture Issue');
         }
-        function retakePhoto() { openCamera((imageData) => { state.reportPhoto = imageData; render(); }, 'Capture Issue'); }
+        function retakePhoto() { 
+            openCamera((imageData) => { 
+                state.reportPhoto = imageData; 
+                render(); 
+            }, 'Capture Issue'); 
+        }
         function setReportCategory(catId) { state.reportCategory = catId; render(); }
         function toggleUrgent() { state.reportUrgent = !state.reportUrgent; render(); }
         function canSubmitReport() {
